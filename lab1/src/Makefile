@@ -10,9 +10,12 @@ CC = g++
 
 CXXFLAGS = -std=c++17 -O2 -pthread
 
-all: a.out
+all: sudoku_solve
 
-a.out: ReadFromstdin.cpp
+#a.out: ReadFromstdin.cpp
+#	g++ $(CXXFLAGS) $^ -o $@
+
+sudoku_solve: DLX.cpp
 	g++ $(CXXFLAGS) $^ -o $@
 
 # b.out: b.cpp
@@ -20,5 +23,5 @@ a.out: ReadFromstdin.cpp
 
 .PHONY: clean
 clean:
-	rm -f a.out 
+	rm -f a.out, sudoku_solve 
 
