@@ -113,29 +113,29 @@ void Insert(int row, int col, int num)
 int main()
 {
 	string file_name;
-	cin >> file_name;
-	file_name = file_name.substr(2);
-    ifstream input(file_name);
-	string line;
-	while(getline(input, line)) {
-        solver.build(729, 324);
-        for (int i = 1; i <= 9; ++i)
-            for (int j = 1; j <= 9; ++j)
-            {
-				int idx = (i - 1) * 9 + j - 1;
-               ans[i][j] = line[idx] - '0';
-                for (int v = 1; v <= 9; ++v)
+	while(cin >> file_name){
+        ifstream input(file_name);
+        string line;
+        while(getline(input, line)) {
+            solver.build(729, 324);
+            for (int i = 1; i <= 9; ++i)
+                for (int j = 1; j <= 9; ++j)
                 {
-                    if (ans[i][j] && ans[i][j] != v)
-                        continue;
-                    Insert(i, j, v);
+                    int idx = (i - 1) * 9 + j - 1;
+                   ans[i][j] = line[idx] - '0';
+                    for (int v = 1; v <= 9; ++v)
+                    {
+                        if (ans[i][j] && ans[i][j] != v)
+                            continue;
+                        Insert(i, j, v);
+                    }
                 }
-            }
-        solver.dance(1);
-        for (int i = 1; i <= 9; ++i)
-            for (int j = 1; j <= 9; ++j)
-                printf("%d", ans[i][j]);
-        puts("");    
+            solver.dance(1);
+            for (int i = 1; i <= 9; ++i)
+                for (int j = 1; j <= 9; ++j)
+                    printf("%d", ans[i][j]);
+            puts("");    
+        }
     }
 
     return 0;
