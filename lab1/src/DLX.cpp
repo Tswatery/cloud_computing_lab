@@ -1,142 +1,126 @@
 #include <bits/stdc++.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include "helper.h"
 
 using namespace std;
 
-const int N = 1e6 + 10;
-int ans[10][10], stk[1000];
+pthread_mutex_t jobQueueMutex=PTHREAD_MUTEX_INITIALIZER;
+sem_t SubfullSlots, fullSlots; // 信号量 用来记录子任务队列中的人物是否为空
+pthread_mutex_t SubjobQueueMutex = PTHREAD_MUTEX_INITIALIZER; // 子任务队列的锁
+string SubjobQueue[100010]; 
+Job Job_queue[100010];
 
-struct DLX
-{
-    static const int MAXSIZE = 1e5 + 10;
-    int n, m, tot, first[MAXSIZE + 10], siz[MAXSIZE + 10];
-    int L[MAXSIZE + 10], R[MAXSIZE + 10], U[MAXSIZE + 10], D[MAXSIZE + 10];
-    int col[MAXSIZE + 10], row[MAXSIZE + 10];
-// col指向的是当前元素所在的列 row是行
-    void build(const int &r, const int &c) // 构建一个长度为c的Dancing Link
-    { // 进行build操作
-        n = r, m = c;
-        for (int i = 0; i <= c; ++i)
-        {
-            L[i] = i - 1, R[i] = i + 1;
-            U[i] = D[i] = i;
+/*---------------------------------------------------------------------------------------------------*/
+// 打印任务线程所需要的变量
+int numsOfjobHavedone = 0;
+
+void* print_ans_of_soduku(void* arg) {
+    while(1) {
+        sem_wait(&SubfullSlots);
+        pthread_mutex_lock(&SubjobQueueMutex); // 把队列上锁
+        int res = numsOfjobHavedone ++;
+        if(numsOfjobHavedone >= 2) break;
+        cout << pthread_self() <<' '<< res << ' ' << SubjobQueue[res] << '\n';
+        pthread_mutex_unlock(&SubjobQueueMutex);
+    }
+}
+
+/*---------------------------------------------------------------------------------------------------*/
+
+
+/*---------------------------------------------------------------------------------------------------*/
+// 读线程所需要的函数与变量
+int Job_We_Have_Now = 0;
+
+void* Input_a_Sudoku_into_a_queue(void *args){
+    // 读线程
+    string file_name;
+    while(cin >> file_name){
+        ifstream fp(file_name);
+        string line;
+        while(getline(fp, line)){
+            cout << line << endl;
+            pthread_mutex_lock(&jobQueueMutex);
+    //      获取锁
+            Job_queue[Job_We_Have_Now].s = line;
+            Job_queue[Job_We_Have_Now].id = Job_We_Have_Now;
+            SubjobQueue[Job_We_Have_Now] = line; 
+            Job_We_Have_Now ++;
+            sem_post(&fullSlots); // 队列中的任务+1
+            pthread_mutex_unlock(&jobQueueMutex);// 释放锁
         }
-        L[0] = c, R[c] = 0, tot = c;
-        memset(first, 0, sizeof(first));
-        memset(siz, 0, sizeof(siz));
     }
+}
+/*---------------------------------------------------------------------------------------------------*/
 
-    void insert(const int &r, const int &c)
-    { // 进行insert操作
-        col[++tot] = c, row[tot] = r, ++siz[c];
-        D[tot] = D[c], U[D[c]] = tot, U[tot] = c, D[c] = tot;
-        if (!first[r])
-            first[r] = L[tot] = R[tot] = tot;
-        else
-        {
-            R[tot] = R[first[r]], L[R[first[r]]] = tot;
-            L[tot] = first[r], R[first[r]] = tot;
-        }
-    }
 
-    void remove(const int &c)
-    { // 进行remove操作
-        int i, j;
-        L[R[c]] = L[c], R[L[c]] = R[c];
-        for (i = D[c]; i != c; i = D[i])
-            for (j = R[i]; j != i; j = R[j])
-                U[D[j]] = U[j], D[U[j]] = D[j], --siz[col[j]];
-    }
+/*---------------------------------------------------------------------------------------------------*/
 
-    void recover(const int &c)
-    { // 进行recover操作
-        int i, j;
-        for (i = U[c]; i != c; i = U[i])
-            for (j = L[i]; j != i; j = L[j])
-                U[D[j]] = D[U[j]] = j, ++siz[col[j]];
-        L[R[c]] = R[L[c]] = c;
-    }
+int nextjobToBeDone = 0;
 
-    bool dance(int dep)
-    { // dance
-        int i, j, c = R[0];
-        if (!R[0]) // 图中没有点了
-        {
-            for (i = 1; i < dep; ++i)
-            {
-                int x = (stk[i] - 1) / 9 / 9 + 1;
-                int y = (stk[i] - 1) / 9 % 9 + 1;
-                int v = (stk[i] - 1) % 9 + 1;
-                ans[x][y] = v;
+int recvJob(){
+    int current_job = 0;
+    sem_wait(&fullSlots); // 避免队列中没有数
+    pthread_mutex_lock(&jobQueueMutex);
+    current_job = nextjobToBeDone ++;
+    if(nextjobToBeDone >= 2) return -1; 
+    pthread_mutex_unlock(&jobQueueMutex);
+    return current_job;
+}
+
+void InputaSubJob(int id, string s){
+    pthread_mutex_lock(&SubjobQueueMutex);
+    SubjobQueue[id] = s;
+    pthread_mutex_unlock(&SubjobQueueMutex);
+    sem_post(&SubfullSlots);
+}
+
+void* Sudoku(void* arg){
+    while(1){
+        DLX solver;
+        int current_job = recvJob(); 
+        if(current_job == -1) break;
+        auto job_do_now = Job_queue[current_job]; // 获取任务
+        for(int i = 1; i <= 9; ++ i){
+            for(int j = 1; j <= 9; ++ j){
+                int idx = (i - 1) * 9 + j - 1;
+                solver.ans[i][j] = job_do_now.s[idx] - '0';
+                for(int v = 1; v <= 9; ++ v){
+                    if(solver.ans[i][j] && solver.ans[i][j] != v)
+                        continue;
+                    Insert(i, j, v, solver);
+                }
             }
-            return 1;
         }
-        for (i = R[0]; i != 0; i = R[i])
-            if (siz[i] < siz[c])
-                c = i;
-        remove(c);
-        for (i = D[c]; i != c; i = D[i])
-        {
-            stk[dep] = row[i];//选择i所在的行
-            for (j = R[i]; j != i; j = R[j])
-                remove(col[j]); 
-            if (dance(dep + 1))
-                return 1;
-            for (j = L[i]; j != i; j = L[j])
-                recover(col[j]);
+        solver.dance(1);
+        string res;
+        for(int i = 1; i <= 9; ++ i){
+            for(int j = 1; j <= 9; ++ j){
+                char c = char(solver.ans[i][j] + '0');  // 强行转换成char
+                res += c;
+            }
         }
-        recover(c);
-        return 0;
+        InputaSubJob(job_do_now.id, res); // 第job_do_now.id的答案是res
     }
-} solver;
-
-int GetId(int row, int col, int num)
-{
-    return (row - 1) * 9 * 9 + (col - 1) * 9 + num;
 }
-
-void Insert(int row, int col, int num)
-{
-    int dx = (row - 1) / 3 + 1;
-    int dy = (col - 1) / 3 + 1;
-    int room = (dx - 1) * 3 + dy;
-    int id = GetId(row, col, num);
-    int f1 = (row - 1) * 9 + num;           // task 1
-    int f2 = 81 + (col - 1) * 9 + num;      // task 2
-    int f3 = 81 * 2 + (room - 1) * 9 + num; // task 3
-    int f4 = 81 * 3 + (row - 1) * 9 + col;  // task 4
-    solver.insert(id, f1);
-    solver.insert(id, f2);
-    solver.insert(id, f3);
-    solver.insert(id, f4);
-}
+/*---------------------------------------------------------------------------------------------------*/
 
 int main()
 {
 	string file_name;
-	while(cin >> file_name){
-        ifstream input(file_name);
-        string line;
-        while(getline(input, line)) {
-            solver.build(729, 324);
-            for (int i = 1; i <= 9; ++i)
-                for (int j = 1; j <= 9; ++j)
-                {
-                    int idx = (i - 1) * 9 + j - 1;
-                   ans[i][j] = line[idx] - '0';
-                    for (int v = 1; v <= 9; ++v)
-                    {
-                        if (ans[i][j] && ans[i][j] != v)
-                            continue;
-                        Insert(i, j, v);
-                    }
-                }
-            solver.dance(1);
-            for (int i = 1; i <= 9; ++i)
-                for (int j = 1; j <= 9; ++j)
-                    printf("%d", ans[i][j]);
-            puts("");    
-        }
-    }
-
+    int NumOfWorker = 8;
+    sem_init(&fullSlots, 0, 0); 
+    sem_init(&SubfullSlots, 0, 0); // 每一个文件刚开始都需要初始化这个队列。
+    pthread_t Read, Output; // 读线程的标识量
+    pthread_create(&Read, NULL, Input_a_Sudoku_into_a_queue, NULL); // 读线程是没有问题的
+    // pthread_t Worker[8];
+    // for(int i = 0; i < 8; ++ i)
+    //     pthread_create(&Worker[i], NULL, Sudoku, NULL);
+    pthread_create(&Output, NULL, print_ans_of_soduku, NULL);
+    pthread_join(Read, NULL);
+    pthread_join(Output, NULL);
+    // for(int i = 0; i < 8; ++ i)
+    //     pthread_join(Worker[i], NULL);
     return 0;
 }
