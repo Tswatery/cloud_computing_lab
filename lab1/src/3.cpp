@@ -7,6 +7,8 @@
 #include <condition_variable>
 #include <queue>
 #include "DLX.h"
+#include <unordered_map>
+#include <atomic>
 #define DEBUG 0
 
 using namespace std;
@@ -25,6 +27,10 @@ queue<string> answer_of_sudoku;
 mutex output_mutex;
 condition_variable output_cv;
 bool work_done = false;
+
+atomic<int> work_id_now(0), out_id_now(0);
+unordered_map<int, string> ans_map;
+//Given an id, we can get the answer by using this map 
 
 void pre_func(){
     string file_name;
@@ -106,6 +112,8 @@ void work_func(){
 			cout << str << endl; // this can not.
 		unique_lock<mutex> lock_out(output_mutex);
 		answer_of_sudoku.push(str);
+		ans_map[work_id_now] = str;
+		work_id_now ++;
 		output_cv.notify_one();
 	}
 	work_done = true;
@@ -119,7 +127,10 @@ void output_func(){
 		unique_lock<mutex> lock_out(output_mutex);
 		output_cv.wait(lock_out, []{return !answer_of_sudoku.empty() || work_done;});
 		if(answer_of_sudoku.empty() && work_done) break;
-		cout << answer_of_sudoku.front() << endl;
+		//cout << answer_of_sudoku.front() << endl;
+		if(out_id_now > work_id_now) this_thread::yield();
+		cout << ans_map[out_id_now] << endl;
+		out_id_now ++;
 		answer_of_sudoku.pop();
 	}
 }
@@ -128,11 +139,19 @@ void output_func(){
 int main(){
 	thread pre(pre_func);
 	thread input(input_func);
-	thread work(work_func);
+	const int num_threads = thread::hardware_concurrency(); 
+	vector<thread> workers;
+	for(int i = 0; i < num_threads; ++ i){
+	    workers.emplace_back(work_func);
+	}
 	thread output(output_func);
 
 	pre.join();
 	input.join();
-	work.join();
+	for(auto& t : workers){
+	    t.join();
+	}
+	//work.join();
 	output.join();
+	return 0;
 }
