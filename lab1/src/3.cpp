@@ -109,11 +109,11 @@ void work_func(){
 			for(int j = 1; j <= 9; ++ j)
 				str += char(solver.ans[i][j] + '0');
 		if(DEBUG)
-			cout << str << endl; // this can not.
-		unique_lock<mutex> lock_out(output_mutex);
+			cout << str << endl;
+		//unique_lock<mutex> lock_out(output_mutex);
 		answer_of_sudoku.push(str);
-		ans_map[work_id_now] = str;
-		work_id_now ++;
+		//ans_map[work_id_now] = str;
+		//work_id_now ++;
 		output_cv.notify_one();
 	}
 	work_done = true;
@@ -127,10 +127,10 @@ void output_func(){
 		unique_lock<mutex> lock_out(output_mutex);
 		output_cv.wait(lock_out, []{return !answer_of_sudoku.empty() || work_done;});
 		if(answer_of_sudoku.empty() && work_done) break;
-		//cout << answer_of_sudoku.front() << endl;
+		cout << answer_of_sudoku.front() << endl;
 		if(out_id_now > work_id_now) this_thread::yield();
-		cout << ans_map[out_id_now] << endl;
-		out_id_now ++;
+		//cout << ans_map[out_id_now] << endl;
+		//out_id_now ++;
 		answer_of_sudoku.pop();
 	}
 }
@@ -141,10 +141,11 @@ int main(){
 	thread input(input_func);
 	const int num_threads = thread::hardware_concurrency(); 
 	vector<thread> workers;
-	for(int i = 0; i < num_threads; ++ i){
+	for(int i = 0; i < 1; ++ i){
 	    workers.emplace_back(work_func);
 	}
-	thread output(output_func);
+	thread output1(output_func);
+	//thread output2(output_func);	
 
 	pre.join();
 	input.join();
@@ -152,6 +153,7 @@ int main(){
 	    t.join();
 	}
 	//work.join();
-	output.join();
+	output1.join();
+	//output2.join();
 	return 0;
 }
