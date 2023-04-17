@@ -15,7 +15,7 @@ all: sudoku_solve
 #a.out: ReadFromstdin.cpp
 #	g++ $(CXXFLAGS) $^ -o $@
 
-sudoku_solve: DLX.cpp
+sudoku_solve: 3.cpp
 	g++ $(CXXFLAGS) $^ -o $@
 
 # b.out: b.cpp
