@@ -8,33 +8,71 @@
 #include <getopt.h>
 #include <string.h>
 #include "libhttp.h"
+#include <sys/stat.h>
 #define N 1024
+
+int get_file_size(FILE *fp)
+{
+    fseek(fp, 0, SEEK_END); // move file pointer to the end
+    int res = ftell(fp);
+    fseek(fp, 0, SEEK_SET); // move file pointer to the start
+    return res;
+}
+
+void serve_file(int fd, char *path, int status)
+{
+    /* TODO: PART 2 */
+    /* PART 2 BEGIN */
+    http_start_response(fd, status);
+    http_send_header(fd, "Content-Type", http_get_mime_type(path));
+    // 在这里读取path的内容
+    FILE *fp = fopen(path, "rb");
+    char *str = malloc(20); // 分配20个字节
+    snprintf(str, 20, "%d", get_file_size(fp));
+    http_send_header(fd, "Content-Length", str); // TODO: change this line too
+    char *buf = malloc(1024);
+    while (!feof(fp))
+    { // 不遇到末尾
+        memset(buf, 0, sizeof(buf));
+        size_t bytes_read = fread(buf, 1, sizeof(buf), fp); // 每次读1个字节，最多读sizeof(buf)个
+        write(fd, buf, bytes_read);
+    }
+    http_end_headers(fd);
+    free(str);
+    free(buf);
+
+    /* PART 2 END */
+}
 
 void server(int fd)
 {
     int clientfd = fd;
-    char reqbuf[N];
-    int n;
-    while (1)
+    struct http_request *request = http_request_parse(clientfd);
+    // 监听套接字clientfd 这个函数会与accept一样阻塞clientfd直到请求是合理的
+    // int n1 = write(STDERR_FILENO, request->method, strlen(request->method));
+    // printf("method: %s, path: %s", request->method, request->path); 这是无效的
+    char directory[30] = "./static";
+    strcat(directory, request->path);
+    strcpy(request->path, directory);
+    int n2 = write(STDERR_FILENO, request->path, strlen(request->path));
+    // 使用stat系统调用去获取文件的元数据信息  -> 操作系统的知识
+    struct stat file_stat;
+    int status = 200;
+    if (stat(request->path, &file_stat) < 0) // 不存在这个文件
     {
-        // struct http_request *request = http_request_parse(clientfd);
-        // printf("1");
-        // // 监听套接字clientfd 这个函数会与accept一样阻塞clientfd直到请求是合理的
-        // if (request == NULL || request->path[0] != '/')
-        // {
-        //     http_start_response(clientfd, 400);
-        //     http_send_header(clientfd, "Content-Type", "text/html");
-        //     http_end_headers(clientfd);
-        //     close(clientfd);
-        //     return;
-        // }
-        // printf("method: %s, path: %s", request->method, request->path);
-        memset(reqbuf, 0, N);
-        n = read(fd, reqbuf, N - 1); /* Recv */
-        n = write(STDOUT_FILENO, reqbuf, strlen(reqbuf));
-        n = write(fd, reqbuf, strlen(reqbuf)); /* echo*/
+        status = 404;
+        request->path = "./static/404.html";
     }
-    close(clientfd);
+    else if (strstr(request->path, "404"))
+        status = 404;
+    else if (strstr(request->path, "501"))
+        status = 501;
+    else if (strstr(request->path, "502"))
+        status = 502;
+    else if (strstr(request->path, "403"))
+        status = 403;
+    serve_file(fd, request->path, status);
+    close(fd);
 }
 
 int main(int argc, char **argv)

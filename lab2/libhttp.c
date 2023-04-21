@@ -4,9 +4,10 @@
 #include <string.h>
 #include <unistd.h>
 #include "libhttp.h"
+#include <stdio.h>
 
 
-
+#define DEBUG 0
 
 #define LIBHTTP_REQUEST_MAX_SIZE 8192
 
@@ -27,6 +28,8 @@ struct http_request *http_request_parse(int fd)
         http_fatal_error("Malloc failed");
 
     int bytes_read = read(fd, read_buffer, LIBHTTP_REQUEST_MAX_SIZE);
+    if(DEBUG)
+        printf("%s", read_buffer);
     read_buffer[bytes_read] = '\0'; /* Always null-terminate. */
 
     char *read_start, *read_end;
@@ -34,6 +37,7 @@ struct http_request *http_request_parse(int fd)
 
     do
     {
+        // printf("%s\n", "已执行1");
         /* Read in the HTTP method: "[A-Z]*" */
         read_start = read_end = read_buffer;
         while (*read_end >= 'A' && *read_end <= 'Z')
@@ -44,6 +48,7 @@ struct http_request *http_request_parse(int fd)
         request->method = malloc(read_size + 1);
         memcpy(request->method, read_start, read_size);
         request->method[read_size] = '\0';
+        // printf("%s\n", "已执行2");
 
         /* Read in a space character. */
         read_start = read_end;
@@ -61,6 +66,7 @@ struct http_request *http_request_parse(int fd)
         request->path = malloc(read_size + 1);
         memcpy(request->path, read_start, read_size);
         request->path[read_size] = '\0';
+        // printf("%s\n", "已执行3");
 
         /* Read in HTTP version and rest of request line: ".*" */
         read_start = read_end;
@@ -69,6 +75,7 @@ struct http_request *http_request_parse(int fd)
         if (*read_end != '\n')
             break;
         read_end++;
+        // printf("%s\n", "已执行4");
 
         free(read_buffer);
         return request;
