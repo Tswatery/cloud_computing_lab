@@ -9,6 +9,7 @@
 #include <string.h>
 #include "libhttp.h"
 #include <sys/stat.h>
+#include <assert.h>
 #define N 1024
 
 int get_file_size(FILE *fp)
@@ -27,8 +28,8 @@ void serve_file(int fd, char *path, int status)
     http_send_header(fd, "Content-Type", http_get_mime_type(path));
     // 在这里读取path的内容
     FILE *fp = fopen(path, "rb");
-    char *str = malloc(20); // 分配20个字节
-    snprintf(str, 20, "%d", get_file_size(fp));
+    char *str = malloc(30); // 分配20个字节
+    snprintf(str, 30, "%d", get_file_size(fp));
     http_send_header(fd, "Content-Length", str); // TODO: change this line too
     char *buf = malloc(1024);
     while (!feof(fp))
@@ -40,7 +41,6 @@ void serve_file(int fd, char *path, int status)
     http_end_headers(fd);
     free(str);
     free(buf);
-
     /* PART 2 END */
 }
 
@@ -50,14 +50,15 @@ void server(int fd)
     struct http_request *request = http_request_parse(clientfd);
     // 监听套接字clientfd 这个函数会与accept一样阻塞clientfd直到请求是合理的
     // int n1 = write(STDERR_FILENO, request->method, strlen(request->method));
-    // printf("method: %s, path: %s", request->method, request->path); 这是无效的
-    char directory[30] = "./static";
+    // printf("method: %s, path: %s", request->method, request->path); 这是打印不出来的
+    char directory[40] = "./static";
     strcat(directory, request->path);
     strcpy(request->path, directory);
-    int n2 = write(STDERR_FILENO, request->path, strlen(request->path));
+    // int n2 = write(STDERR_FILENO, request->path, strlen(request->path));
     // 使用stat系统调用去获取文件的元数据信息  -> 操作系统的知识
     struct stat file_stat;
     int status = 200;
+
     if (stat(request->path, &file_stat) < 0) // 不存在这个文件
     {
         status = 404;
@@ -71,6 +72,10 @@ void server(int fd)
         status = 502;
     else if (strstr(request->path, "403"))
         status = 403;
+    else if(strcmp(request->method,"GET") && strcmp(request->method, "POST")){
+        request->path = "./static/501.html"; status = 501;
+    }
+    // int n2 = write(STDERR_FILENO, request->path, strlen(request->path));
     serve_file(fd, request->path, status);
     close(fd);
 }

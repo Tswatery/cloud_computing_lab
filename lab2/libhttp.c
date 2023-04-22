@@ -6,7 +6,6 @@
 #include "libhttp.h"
 #include <stdio.h>
 
-
 #define DEBUG 0
 
 #define LIBHTTP_REQUEST_MAX_SIZE 8192
@@ -28,7 +27,7 @@ struct http_request *http_request_parse(int fd)
         http_fatal_error("Malloc failed");
 
     int bytes_read = read(fd, read_buffer, LIBHTTP_REQUEST_MAX_SIZE);
-    if(DEBUG)
+    if (DEBUG)
         printf("%s", read_buffer);
     read_buffer[bytes_read] = '\0'; /* Always null-terminate. */
 
@@ -151,11 +150,15 @@ char *http_get_mime_type(char *file_name)
     }
     else if (strcmp(file_extension, ".js") == 0)
     {
-        return "application/javascript";
+        return "text/javascript";
     }
     else if (strcmp(file_extension, ".pdf") == 0)
     {
         return "application/pdf";
+    }
+    else if (strcmp(file_extension, ".json") == 0)
+    {
+        return "application/json";
     }
     else
     {
