@@ -10,14 +10,22 @@
 #include "libhttp.h"
 #include <sys/stat.h>
 #include <assert.h>
+#include <fcntl.h>
 #define N 1024
 
-int get_file_size(FILE *fp)
+int get_file_length(char *path)
 {
-    fseek(fp, 0, SEEK_END); // move file pointer to the end
-    int res = ftell(fp);
-    fseek(fp, 0, SEEK_SET); // move file pointer to the start
-    return res;
+    int fd = open(path, O_RDONLY);
+    off_t file_size = 0; // 文件大小
+    char buffer;         // 每次读一个字节
+
+    while (read(fd, &buffer, 1) > 0)
+    {
+        file_size++;
+    }
+
+    close(fd);
+    return file_size;
 }
 
 void serve_file(int fd, char *path, int status)
@@ -26,21 +34,22 @@ void serve_file(int fd, char *path, int status)
     /* PART 2 BEGIN */
     http_start_response(fd, status);
     http_send_header(fd, "Content-Type", http_get_mime_type(path));
-    // 在这里读取path的内容
-    FILE *fp = fopen(path, "rb");
-    char *str = malloc(30); // 分配20个字节
-    snprintf(str, 30, "%d", get_file_size(fp));
-    http_send_header(fd, "Content-Length", str); // TODO: change this line too
-    char *buf = malloc(1024);
-    while (!feof(fp))
-    { // 不遇到末尾
-        memset(buf, 0, sizeof(buf));
-        size_t bytes_read = fread(buf, 1, sizeof(buf), fp); // 每次读1个字节，最多读sizeof(buf)个
-        write(fd, buf, bytes_read);
+    // 从这里开始读取path的内容
+    int file_size = get_file_length(path);
+    char *len = malloc(10);
+    snprintf(len, 10, "%d", file_size);
+    http_send_header(fd, "Content-Length", len);
+    int fp = open(path, O_RDONLY);
+    char buffer;
+    size_t nread, nwrite;
+    while ((nread = read(fp, &buffer, 1)) > 0)
+    {
+        nwrite = write(fd, &buffer, nread);
     }
+    close(fp);
     http_end_headers(fd);
-    free(str);
-    free(buf);
+    // free(len);
+
     /* PART 2 END */
 }
 
@@ -72,8 +81,10 @@ void server(int fd)
         status = 502;
     else if (strstr(request->path, "403"))
         status = 403;
-    else if(strcmp(request->method,"GET") && strcmp(request->method, "POST")){
-        request->path = "./static/501.html"; status = 501;
+    else if (strcmp(request->method, "GET") && strcmp(request->method, "POST"))
+    {
+        request->path = "./static/501.html";
+        status = 501;
     }
     // int n2 = write(STDERR_FILENO, request->path, strlen(request->path));
     serve_file(fd, request->path, status);

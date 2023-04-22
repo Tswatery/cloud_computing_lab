@@ -117,7 +117,7 @@ char *http_get_response_message(int status_code)
 
 void http_start_response(int fd, int status_code)
 {
-    dprintf(fd, "HTTP/1.0 %d %s\r\n", status_code, http_get_response_message(status_code));
+    dprintf(fd, "HTTP/1.1 %d %s\r\n", status_code, http_get_response_message(status_code));
 }
 
 void http_send_header(int fd, char *key, char *value) { dprintf(fd, "%s: %s\r\n", key, value); }
