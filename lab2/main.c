@@ -11,84 +11,54 @@
 #include <sys/stat.h>
 #include <assert.h>
 #include <fcntl.h>
-#define N 1024
+#define N 2048
 
 int get_file_length(char *path)
 {
     int fd = open(path, O_RDONLY);
     off_t file_size = 0; // 文件大小
     char buffer;         // 每次读一个字节
-
     while (read(fd, &buffer, 1) > 0)
     {
         file_size++;
     }
-
     close(fd);
     return file_size;
 }
 
-void serve_file(int fd, char *path, int status)
-{
-    /* TODO: PART 2 */
-    /* PART 2 BEGIN */
-    http_start_response(fd, status);
-    http_send_header(fd, "Content-Type", http_get_mime_type(path));
-    // 从这里开始读取path的内容
-    int file_size = get_file_length(path);
-    char *len = malloc(10);
-    snprintf(len, 10, "%d", file_size);
-    http_send_header(fd, "Content-Length", len);
-    int fp = open(path, O_RDONLY);
-    char buffer;
-    size_t nread, nwrite;
-    while ((nread = read(fp, &buffer, 1)) > 0)
-    {
-        nwrite = write(fd, &buffer, nread);
+void* server(void* args){
+    int* temp_fd = (int*) args;
+    int server_socket = *temp_fd;
+    char reqbuf[N];
+    int nread, nwrite;
+    while(1){ // 要无限循环等待
+        struct http_request* request = http_request_parse(server_socket); // 解析
+        if(!request) {
+            return NULL;
+        }
+        char directory[50] = "./static";
+        strcat(directory, request->path);
+        strcpy(request->path, directory);
+        nwrite = write(STDOUT_FILENO, request->path, strlen(request->path));
+        http_start_response(server_socket, 200);
+        http_send_header(server_socket, "Content-Type", http_get_mime_type(request->path));
+        int file_size = get_file_length(request->path);
+        char *len = malloc(10);
+        snprintf(len, 10, "%d", file_size);
+        http_send_header(server_socket, "Content-Length", len);
+        http_end_headers(server_socket);
+        int fp = open(directory, O_RDONLY);
+        memset(reqbuf, 0, sizeof(reqbuf));
+        while((nread = read(fp, reqbuf, sizeof(reqbuf))) > 0){
+            nwrite = write(server_socket, reqbuf, nread);
+        }
+        // nwrite = write(server_socket, "Hello", sizeof("Hello")); 很显然如果我不写http的头部信息这句话就会返回HTTP0.9的错误
+        // 所以我需要写返回的头部，才能让curl识别成为HTTP1.1
+        close(fp);
+        free(len);
     }
-    close(fp);
-    http_end_headers(fd);
-    // free(len);
-
-    /* PART 2 END */
-}
-
-void server(int fd)
-{
-    int clientfd = fd;
-    struct http_request *request = http_request_parse(clientfd);
-    // 监听套接字clientfd 这个函数会与accept一样阻塞clientfd直到请求是合理的
-    // int n1 = write(STDERR_FILENO, request->method, strlen(request->method));
-    // printf("method: %s, path: %s", request->method, request->path); 这是打印不出来的
-    char directory[40] = "./static";
-    strcat(directory, request->path);
-    strcpy(request->path, directory);
-    // int n2 = write(STDERR_FILENO, request->path, strlen(request->path));
-    // 使用stat系统调用去获取文件的元数据信息  -> 操作系统的知识
-    struct stat file_stat;
-    int status = 200;
-
-    if (stat(request->path, &file_stat) < 0) // 不存在这个文件
-    {
-        status = 404;
-        request->path = "./static/404.html";
-    }
-    else if (strstr(request->path, "404"))
-        status = 404;
-    else if (strstr(request->path, "501"))
-        status = 501;
-    else if (strstr(request->path, "502"))
-        status = 502;
-    else if (strstr(request->path, "403"))
-        status = 403;
-    else if (strcmp(request->method, "GET") && strcmp(request->method, "POST"))
-    {
-        request->path = "./static/501.html";
-        status = 501;
-    }
-    // int n2 = write(STDERR_FILENO, request->path, strlen(request->path));
-    serve_file(fd, request->path, status);
-    close(fd);
+    free(temp_fd);
+    return NULL;
 }
 
 int main(int argc, char **argv)
@@ -178,7 +148,7 @@ int main(int argc, char **argv)
         // 注意remote_addr是引用 它对应的是客户端的结构体指针
         client++;
         printf("[%d connections accept] from clinet %s:%d\n", client, inet_ntoa(remote_addr.sin_addr), ntohs(remote_addr.sin_port));
-        server(*clinet_fd); // 处理对应的套接字
+        server(clinet_fd); // 处理对应的套接字
     }
     return 0;
 }
