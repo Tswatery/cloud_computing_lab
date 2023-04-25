@@ -1,0 +1,8 @@
+.DS_Store
+._log.typ
+.log.pdf
+.vscode
+._.gitignore
+.*.DS_Store
+._*
+*.o

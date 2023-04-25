@@ -11,51 +11,29 @@
 #include <sys/stat.h>
 #include <assert.h>
 #include <fcntl.h>
+#include "server.h"
 #define N 2048
 
-int get_file_length(char *path)
-{
-    int fd = open(path, O_RDONLY);
-    off_t file_size = 0; // 文件大小
-    char buffer;         // 每次读一个字节
-    while (read(fd, &buffer, 1) > 0)
-    {
-        file_size++;
-    }
-    close(fd);
-    return file_size;
+void post_method(struct http_request* request, int server_socket){
+    return ;
 }
 
-void* server(void* args){
-    int* temp_fd = (int*) args;
+
+void *server(void *args)
+{
+    int *temp_fd = (int *)args;
     int server_socket = *temp_fd;
-    char reqbuf[N];
-    int nread, nwrite;
-    while(1){ // 要无限循环等待
-        struct http_request* request = http_request_parse(server_socket); // 解析
-        if(!request) {
+    while (1)
+    {                                                                     // 要无限循环等待
+        struct http_request *request = http_request_parse(server_socket); // 解析
+        if (!request)
+        {
             return NULL;
         }
-        char directory[50] = "./static";
-        strcat(directory, request->path);
-        strcpy(request->path, directory);
-        nwrite = write(STDOUT_FILENO, request->path, strlen(request->path));
-        http_start_response(server_socket, 200);
-        http_send_header(server_socket, "Content-Type", http_get_mime_type(request->path));
-        int file_size = get_file_length(request->path);
-        char *len = malloc(10);
-        snprintf(len, 10, "%d", file_size);
-        http_send_header(server_socket, "Content-Length", len);
-        http_end_headers(server_socket);
-        int fp = open(directory, O_RDONLY);
-        memset(reqbuf, 0, sizeof(reqbuf));
-        while((nread = read(fp, reqbuf, sizeof(reqbuf))) > 0){
-            nwrite = write(server_socket, reqbuf, nread);
-        }
-        // nwrite = write(server_socket, "Hello", sizeof("Hello")); 很显然如果我不写http的头部信息这句话就会返回HTTP0.9的错误
-        // 所以我需要写返回的头部，才能让curl识别成为HTTP1.1
-        close(fp);
-        free(len);
+        if (!strcmp(request->method, "GET"))
+            get_method(request, server_socket);
+        else if (!strcmp(request->method, "POST"))
+            post_method(request, server_socket);
     }
     free(temp_fd);
     return NULL;

@@ -4,7 +4,6 @@
 #include <string.h>
 #include <unistd.h>
 #include "libhttp.h"
-#include <stdio.h>
 
 #define DEBUG 0
 
