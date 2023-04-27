@@ -24,60 +24,78 @@ struct http_request *http_request_parse(int fd)
     char *read_buffer = malloc(LIBHTTP_REQUEST_MAX_SIZE + 1);
     if (!read_buffer)
         http_fatal_error("Malloc failed");
-
     int bytes_read = read(fd, read_buffer, LIBHTTP_REQUEST_MAX_SIZE);
     if (DEBUG)
         printf("%s", read_buffer);
     read_buffer[bytes_read] = '\0'; /* Always null-terminate. */
-
-    char *read_start, *read_end;
-    size_t read_size;
-
-    do
+    if (strstr(read_buffer, "GET"))// GET
     {
-        // printf("%s\n", "已执行1");
-        /* Read in the HTTP method: "[A-Z]*" */
-        read_start = read_end = read_buffer;
-        while (*read_end >= 'A' && *read_end <= 'Z')
+        request->is_get = 1;
+
+        char *read_start, *read_end;
+        size_t read_size;
+        do
+        {
+            // printf("%s\n", "已执行1");
+            /* Read in the HTTP method: "[A-Z]*" */
+            read_start = read_end = read_buffer;
+            while (*read_end >= 'A' && *read_end <= 'Z')
+                read_end++;
+            read_size = read_end - read_start;
+            if (read_size == 0)
+                break;
+            request->method = malloc(read_size + 1);
+            memcpy(request->method, read_start, read_size);
+            request->method[read_size] = '\0';
+            // printf("%s\n", "已执行2");
+
+            /* Read in a space character. */
+            read_start = read_end;
+            if (*read_end != ' ')
+                break;
             read_end++;
-        read_size = read_end - read_start;
-        if (read_size == 0)
-            break;
-        request->method = malloc(read_size + 1);
-        memcpy(request->method, read_start, read_size);
-        request->method[read_size] = '\0';
-        // printf("%s\n", "已执行2");
 
-        /* Read in a space character. */
-        read_start = read_end;
-        if (*read_end != ' ')
-            break;
-        read_end++;
+            /* Read in the path: "[^ \n]*" */
+            read_start = read_end;
+            while (*read_end != '\0' && *read_end != ' ' && *read_end != '\n')
+                read_end++;
+            read_size = read_end - read_start;
+            if (read_size == 0)
+                break;
+            request->path = malloc(read_size + 1);
+            memcpy(request->path, read_start, read_size);
+            request->path[read_size] = '\0';
+            // printf("%s\n", "已执行3");
 
-        /* Read in the path: "[^ \n]*" */
-        read_start = read_end;
-        while (*read_end != '\0' && *read_end != ' ' && *read_end != '\n')
+            /* Read in HTTP version and rest of request line: ".*" */
+            read_start = read_end;
+            while (*read_end != '\0' && *read_end != '\n')
+                read_end++;
+            if (*read_end != '\n')
+                break;
             read_end++;
-        read_size = read_end - read_start;
-        if (read_size == 0)
-            break;
-        request->path = malloc(read_size + 1);
-        memcpy(request->path, read_start, read_size);
-        request->path[read_size] = '\0';
-        // printf("%s\n", "已执行3");
-
-        /* Read in HTTP version and rest of request line: ".*" */
-        read_start = read_end;
-        while (*read_end != '\0' && *read_end != '\n')
-            read_end++;
-        if (*read_end != '\n')
-            break;
-        read_end++;
-        // printf("%s\n", "已执行4");
-
-        free(read_buffer);
+            // printf("%s\n", "已执行4");
+            free(read_buffer);
+            return request;
+        } while (0);
+    }else if(strstr(read_buffer, "POST")){
+        request->is_get = 0;
+        // method and path
+        request->method = malloc(10); request->path = malloc(10);
+        sscanf(read_buffer, "%s %s", request->method, request->path);
+        //content-type
+        request->content_type = malloc(50);
+        char* content_type = strstr(read_buffer, "Content-Type: ");
+        sscanf(content_type, "Content-Type: %s", request->content_type);
+        int cont_l = 0;
+        char* content_l = strstr(read_buffer, "Content-Length: ");
+        sscanf(content_l, "Content-Length: %d", &cont_l);
+        request->content = malloc(cont_l + 10);
+        char* content = strstr(read_buffer, "\r\n\r\n") + 4; // 要从下一行开始
+        memcpy(request->content, content, cont_l);
+        request->content[cont_l] = '\0';
         return request;
-    } while (0);
+    }
 
     /* An error occurred. */
     free(request);

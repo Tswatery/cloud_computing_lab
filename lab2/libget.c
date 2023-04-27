@@ -3,16 +3,16 @@
 #include <string.h>
 #include <unistd.h>
 #include "libhttp.h"
-#include "server.h"
+#include "libget.h"
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <regex.h>
 #define N 2048
 
-char *jsonobj[4] = {"{\"id\":1,\"name\":\"Foo\"}",
-                    "{\"id\":2,\"name\":\"Bar\"}",
-                    "{\"id\":3,\"name\":\"Foo\"}",
-                    "{\"id\":4,\"name\":\"Bar\"}"};
+char *jsonobj[4] = {"[{\"id\":1,\"name\":\"Foo\"}]",
+                    "[{\"id\":2,\"name\":\"Bar\"}]",
+                    "[{\"id\":3,\"name\":\"Foo\"}]",
+                    "[{\"id\":4,\"name\":\"Bar\"}]"};
 
 char *id_map_name[4] = {"Foo", "Bar", "Foo", "Bar"};
 
@@ -53,7 +53,7 @@ void echo_back(struct http_request *request, int server_socket, int status)
     nwrite = write(STDOUT_FILENO, " ", 1);
     // ----
     if(status == 201) {
-        nwrite = write(STDOUT_FILENO, "status = 201 ", strlen("status = 201"));
+        // nwrite = write(STDOUT_FILENO, "status = 201 ", strlen("status = 201"));
         http_start_response(server_socket, 200);
         http_send_header(server_socket, "Content-Type", http_get_mime_type("data.json"));
         int id = atoi(request->path); // 对应的id号
@@ -118,7 +118,7 @@ void turn_to_api(struct http_request *request, int server_socket)
         // 匹配 匹配成功返回0 2表示最大匹配数 matches表示匹配到的子字符串在原字符串中的起止位置
         if (!reti)
         {
-            int nwrite = write(STDOUT_FILENO, "match secceed ", strlen("match secceed "));
+            // int nwrite = write(STDOUT_FILENO, "match secceed ", strlen("match secceed "));
             int id_len = matches[1].rm_eo - matches[1].rm_so;
             int name_len = matches[2].rm_eo - matches[2].rm_so;
             char s_id[id_len + 1], name[name_len + 1];
@@ -126,10 +126,6 @@ void turn_to_api(struct http_request *request, int server_socket)
             strncpy(name, &request->path[matches[2].rm_so], name_len);
             s_id[id_len] = '\0';
             name[name_len] = '\0';
-            nwrite = write(STDOUT_FILENO, s_id, strlen(s_id));
-            nwrite = write(STDOUT_FILENO, " ", 1);
-            nwrite = write(STDOUT_FILENO, name, strlen(name));
-            nwrite = write(STDOUT_FILENO, " ", 1);
             int id = atoi(s_id);// 获得对应的id
             if(id > 4 || (strcmp(name, id_map_name[id - 1]))) { // 如果id >=4 或者name与id对应的字符串不匹配 则就是notfound
                 strcpy(request->path, apinotfound);

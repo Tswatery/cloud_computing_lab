@@ -25,8 +25,11 @@
  */
 struct http_request
 {
+    int is_get;
     char *method;
     char *path;
+    char *content_type;
+    char *content;
 };
 
 struct http_request *http_request_parse(int fd);

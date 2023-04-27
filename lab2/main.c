@@ -11,13 +11,9 @@
 #include <sys/stat.h>
 #include <assert.h>
 #include <fcntl.h>
-#include "server.h"
+#include "libget.h"
+#include "libpost.h"
 #define N 2048
-
-void post_method(struct http_request* request, int server_socket){
-    return ;
-}
-
 
 void *server(void *args)
 {
@@ -32,8 +28,9 @@ void *server(void *args)
         }
         if (!strcmp(request->method, "GET"))
             get_method(request, server_socket);
-        else if (!strcmp(request->method, "POST"))
+        else //if (!strcmp(request->method, "POST"))
             post_method(request, server_socket);
+        free(request);
     }
     free(temp_fd);
     return NULL;

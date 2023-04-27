@@ -1,7 +1,7 @@
 all: http-server
 
-http-server: libhttp.o main.o server.o
-	gcc -o http-server libhttp.o server.o main.o
+http-server: libhttp.o main.o libget.o libpost.o
+	gcc -o http-server libhttp.o libget.o libpost.o main.o
 
 libhttp.o: libhttp.c
 	gcc -c libhttp.c
@@ -9,8 +9,11 @@ libhttp.o: libhttp.c
 main.o: main.c
 	gcc -c main.c
 
-server.o: server.c
-	gcc -c server.c
+libget.o: libget.c
+	gcc -c libget.c
+
+libpost.o: libpost.c
+	gcc -c libpost.c
 
 clean:
-	rm -rf http-server libhttp.o server.o main.o
+	rm -rf http-server libhttp.o libget.o main.o
