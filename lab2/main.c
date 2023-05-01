@@ -103,7 +103,7 @@ int main(int argc, char **argv)
     // 将服务器的套接字与指定的地址和端口绑定
     socklen_t sin_size = sizeof(struct sockaddr_in);
     struct sockaddr_in remote_addr; // 客户端的socket结构体
-    if (listen(server_fd, 5) < 0)
+    if (listen(server_fd, 1024) < 0)
     {
         perror("listen");
         return 1;

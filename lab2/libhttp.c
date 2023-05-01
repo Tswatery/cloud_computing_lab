@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include "libhttp.h"
 
-#define DEBUG 0
+#define DEBUG 1
 
 #define LIBHTTP_REQUEST_MAX_SIZE 8192
 
