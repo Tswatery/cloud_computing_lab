@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include "libget.h"
 #include "libpost.h"
+#include <pthread.h>
 #define N 2048
 
 void *server(void *args)
@@ -123,7 +124,13 @@ int main(int argc, char **argv)
         // 注意remote_addr是引用 它对应的是客户端的结构体指针
         client++;
         printf("[%d connections accept] from clinet %s:%d\n", client, inet_ntoa(remote_addr.sin_addr), ntohs(remote_addr.sin_port));
-        server(clinet_fd); // 处理对应的套接字
+        // pthread_create(server, clinet_fd); // 处理对应的套接字
+        pthread_t th;
+        if(pthread_create(&th, NULL, server, clinet_fd)!=0)
+        {
+            perror("pthread_create failed");
+            exit(1);
+        }
     }
     return 0;
 }
