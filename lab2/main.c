@@ -20,20 +20,28 @@ void *server(void *args)
 {
     int *temp_fd = (int *)args;
     int server_socket = *temp_fd;
-    while (1)
-    {                                                                     // 要无限循环等待
-        struct http_request *request = http_request_parse(server_socket); // 解析
-        if (!request)
-        {
-            return NULL;
+    int nread;
+    char *readbuffer = malloc(N + 1);
+    wait_for_data(server_socket);
+    while ((nread = read(server_socket, readbuffer, N)) > 0)
+    { // 要无限循环等待//先读取
+        // printf("读取到了%s\n", readbuffer);
+        char *sub_http_request = malloc(100);
+        strcpy(sub_http_request, readbuffer);
+        while(sub_http_request != NULL){
+            struct http_request *request = malloc(sizeof(struct http_request));
+            request = http_request_parse(sub_http_request); 
+            // 可以用线程优化不然会很慢
+            if(!strcmp(request->method, "GET"))
+                get_method(request, server_socket);
+            else
+                post_method(request, server_socket);
+            free(request);
+            sub_http_request = strtok(NULL, "\r\n\r\n");
         }
-        if (!strcmp(request->method, "GET"))
-            get_method(request, server_socket);
-        else //if (!strcmp(request->method, "POST"))
-            post_method(request, server_socket);
-        free(request);
     }
     free(temp_fd);
+    free(readbuffer);
     return NULL;
 }
 
@@ -126,7 +134,7 @@ int main(int argc, char **argv)
         printf("[%d connections accept] from clinet %s:%d\n", client, inet_ntoa(remote_addr.sin_addr), ntohs(remote_addr.sin_port));
         // pthread_create(server, clinet_fd); // 处理对应的套接字
         pthread_t th;
-        if(pthread_create(&th, NULL, server, clinet_fd)!=0)
+        if (pthread_create(&th, NULL, server, clinet_fd) != 0)
         {
             perror("pthread_create failed");
             exit(1);

@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/select.h>
+
 #include "libhttp.h"
 
 #define DEBUG 1
@@ -15,73 +18,18 @@ void http_fatal_error(char *message)
     exit(ENOBUFS);
 }
 
-struct http_request *http_request_parse(int fd)
+struct http_request *http_request_parse(char* read_buffer)
 {
     struct http_request *request = malloc(sizeof(struct http_request));
     if (!request)
         http_fatal_error("Malloc failed");
-
-    char *read_buffer = malloc(LIBHTTP_REQUEST_MAX_SIZE + 1);
-    if (!read_buffer)
-        http_fatal_error("Malloc failed");
-    int bytes_read = read(fd, read_buffer, LIBHTTP_REQUEST_MAX_SIZE);
-    if (DEBUG)
-        printf("%s", read_buffer);
-    read_buffer[bytes_read] = '\0'; /* Always null-terminate. */
-    if (strstr(read_buffer, "GET"))// GET
-    {
-        request->is_get = 1;
-
-        char *read_start, *read_end;
-        size_t read_size;
-        do
-        {
-            // printf("%s\n", "已执行1");
-            /* Read in the HTTP method: "[A-Z]*" */
-            read_start = read_end = read_buffer;
-            while (*read_end >= 'A' && *read_end <= 'Z')
-                read_end++;
-            read_size = read_end - read_start;
-            if (read_size == 0)
-                break;
-            request->method = malloc(read_size + 1);
-            memcpy(request->method, read_start, read_size);
-            request->method[read_size] = '\0';
-            // printf("%s\n", "已执行2");
-
-            /* Read in a space character. */
-            read_start = read_end;
-            if (*read_end != ' ')
-                break;
-            read_end++;
-
-            /* Read in the path: "[^ \n]*" */
-            read_start = read_end;
-            while (*read_end != '\0' && *read_end != ' ' && *read_end != '\n')
-                read_end++;
-            read_size = read_end - read_start;
-            if (read_size == 0)
-                break;
-            request->path = malloc(read_size + 1);
-            memcpy(request->path, read_start, read_size);
-            request->path[read_size] = '\0';
-            // printf("%s\n", "已执行3");
-
-            /* Read in HTTP version and rest of request line: ".*" */
-            read_start = read_end;
-            while (*read_end != '\0' && *read_end != '\n')
-                read_end++;
-            if (*read_end != '\n')
-                break;
-            read_end++;
-            // printf("%s\n", "已执行4");
-            free(read_buffer);
-            return request;
-        } while (0);
-    }else if(strstr(read_buffer, "POST")){
-        request->is_get = 0;
-        // method and path
-        request->method = malloc(10); request->path = malloc(10);
+    printf("read_buffer是%s\n", read_buffer);
+    if(strstr(read_buffer, "GET")){
+        request->method = malloc(20);
+        request->path = malloc(20);
+        sscanf(read_buffer, "%s %s", request->method, request->path);
+    }else {
+        request->method = malloc(10); request->path = malloc(20);
         sscanf(read_buffer, "%s %s", request->method, request->path);
         //content-type
         request->content_type = malloc(50);
@@ -94,13 +42,8 @@ struct http_request *http_request_parse(int fd)
         char* content = strstr(read_buffer, "\r\n\r\n") + 4; // 要从下一行开始
         memcpy(request->content, content, cont_l);
         request->content[cont_l] = '\0';
-        return request;
     }
-
-    /* An error occurred. */
-    free(request);
-    free(read_buffer);
-    return NULL;
+    return request;
 }
 
 char *http_get_response_message(int status_code)
@@ -204,4 +147,30 @@ void http_format_index(char *buffer, char *path)
 {
     int length = strlen(path) + strlen("/index.html") + 1;
     snprintf(buffer, length, "%s/index.html", path);
+}
+
+void wait_for_data(int fd){
+    struct timeval timeout = {5, 0};
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1) {
+        perror("Failed to get socket flags");
+        exit(EXIT_FAILURE);
+    }
+    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+        perror("Failed to set socket to non-blocking mode");
+        exit(EXIT_FAILURE);
+    }
+
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+    FD_SET(fd, &read_fds);
+    int select_result = select(fd + 1, &read_fds, NULL, NULL, &timeout);
+    if (select_result == -1) {
+        perror("Failed to select on socket");
+        exit(EXIT_FAILURE);
+    } else if (select_result == 0) {
+        printf("No data received within 5 seconds, closing socket.\n");
+        close(fd);
+        exit(EXIT_SUCCESS);
+    }
 }

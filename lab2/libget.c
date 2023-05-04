@@ -49,8 +49,6 @@ void echo_back(struct http_request *request, int server_socket, int status)
     int nread, nwrite;
     char directory[50];
     strcpy(directory, request->path);
-    nwrite = write(STDOUT_FILENO, request->path, strlen(request->path)); // 调试信息
-    nwrite = write(STDOUT_FILENO, " ", 1);
     // ----
     if(status == 201) {
         // nwrite = write(STDOUT_FILENO, "status = 201 ", strlen("status = 201"));

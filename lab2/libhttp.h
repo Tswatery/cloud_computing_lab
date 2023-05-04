@@ -25,14 +25,13 @@
  */
 struct http_request
 {
-    int is_get;
     char *method;
     char *path;
     char *content_type;
     char *content;
 };
 
-struct http_request *http_request_parse(int fd);
+struct http_request *http_request_parse(char* read_buffer);
 
 /*
  * Functions for sending an HTTP response.
@@ -47,5 +46,7 @@ void http_format_index(char *buffer, char *path);
  * Helper function: gets the Content-Type based on a file name.
  */
 char *http_get_mime_type(char *file_name);
+
+void wait_for_data(int fd);
 
 #endif
