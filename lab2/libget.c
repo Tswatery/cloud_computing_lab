@@ -75,10 +75,8 @@ void echo_back(struct http_request *request, int server_socket, int status)
     //---
     int fp = open(directory, O_RDONLY);
     memset(reqbuf, 0, sizeof(reqbuf));
-    while ((nread = read(fp, reqbuf, sizeof(reqbuf))) > 0)
-    {
-        nwrite = write(server_socket, reqbuf, nread);
-    }
+    nread = read(fp, reqbuf, sizeof(reqbuf));
+    nwrite = write(server_socket, reqbuf, nread);
     //--- write file in socket
     close(fp);
     free(len);

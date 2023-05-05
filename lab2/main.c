@@ -23,69 +23,44 @@ void *server(void *args)
     int fd = server_socket;
     int nread;
     char *readbuffer = malloc(N + 1);
-    struct timeval timeout = {5, 0};
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1) {
-        perror("Failed to get socket flags");
-        exit(EXIT_FAILURE);
-    }
-    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
-        perror("Failed to set socket to non-blocking mode");
-        exit(EXIT_FAILURE);
-    }
-    fd_set read_fds;
-    FD_ZERO(&read_fds);
-    FD_SET(fd, &read_fds);
-    int select_result = select(fd + 1, &read_fds, NULL, NULL, &timeout);
-    if (select_result == -1) {
-        perror("Failed to select on socket");
-        exit(EXIT_FAILURE);
-    } else if (select_result == 0) {
-        printf("No data received within 5 seconds, closing socket.\n");
-        close(fd);
-        exit(EXIT_SUCCESS);
-    }
     char *request_arr[10]; // 已知大小且比较小，可以分配到栈空间中
     int request_cnt = 0;
     struct http_request *request = malloc(sizeof(struct http_request));
-    
-    while ((nread = read(server_socket, readbuffer, N)) > 0)
+    nread = read(server_socket, readbuffer, N);
+    if (strstr(readbuffer, "POST"))
     {
-        if (strstr(readbuffer, "POST"))
-        {
-            request = http_request_parse(readbuffer);
-            post_method(request, server_socket);
-        }
-        else
-        {
-            char *start_str = readbuffer;
-            char *end_str;
-            while ((end_str = strstr(start_str, "\r\n\r\n")))
-            {
-                size_t len = end_str - start_str;
-                request_arr[request_cnt] = malloc(len + 1);
-                memcpy(request_arr[request_cnt], start_str, len);
-                request_arr[request_cnt][len] = '\0';
-                request_cnt++;
-                start_str = end_str + 4;
-            }
-            // 处理完后需要清空缓冲区
-            memset(readbuffer, 0, N + 1);
-            for (int i = 0; i < request_cnt; ++i)
-            {
-                request = http_request_parse(request_arr[i]);
-                printf("method: %s, path: %s\n", request->method, request->path);
-                get_method(request, server_socket);
-            }
-            // 处理完一个请求之后需要清空 request_arr 数组，以便下一个请求的处理
-            for (int i = 0; i < request_cnt; ++i)
-            {
-                free(request_arr[i]);
-                request_arr[i] = NULL;
-            }
-            request_cnt = 0;
-        }
+        request = http_request_parse(readbuffer);
+        post_method(request, server_socket);
     }
+    else
+    {
+        char *start_str = readbuffer;
+        char *end_str;
+        while ((end_str = strstr(start_str, "\r\n\r\n")))
+        {
+            size_t len = end_str - start_str;
+            request_arr[request_cnt] = malloc(len + 1);
+            memcpy(request_arr[request_cnt], start_str, len);
+            request_arr[request_cnt][len] = '\0';
+            request_cnt++;
+            start_str = end_str + 4;
+        }
+        // 处理完后需要清空缓冲区
+        memset(readbuffer, 0, N + 1);
+        for (int i = 0; i < request_cnt; ++i)
+        {
+            request = http_request_parse(request_arr[i]);
+            get_method(request, server_socket);
+        }
+        // 处理完一个请求之后需要清空 request_arr 数组，以便下一个请求的处理
+        for (int i = 0; i < request_cnt; ++i)
+        {
+            free(request_arr[i]);
+            request_arr[i] = NULL;
+        }
+        request_cnt = 0;
+    }
+    close(fd);
     free(request);
     free(temp_fd);
     free(readbuffer);
