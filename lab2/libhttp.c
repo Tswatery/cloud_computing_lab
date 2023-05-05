@@ -23,7 +23,7 @@ struct http_request *http_request_parse(char* read_buffer)
     struct http_request *request = malloc(sizeof(struct http_request));
     if (!request)
         http_fatal_error("Malloc failed");
-    printf("read_buffer是%s\n", read_buffer);
+    printf("in parse read_buffer is \n%s", read_buffer);
     if(strstr(read_buffer, "GET")){
         request->method = malloc(20);
         request->path = malloc(20);
@@ -45,6 +45,7 @@ struct http_request *http_request_parse(char* read_buffer)
     }
     return request;
 }
+
 
 char *http_get_response_message(int status_code)
 {

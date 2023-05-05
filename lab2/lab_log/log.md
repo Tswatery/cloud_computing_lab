@@ -64,3 +64,7 @@ int n2 = write(STDERR_FILENO, request->path, strlen(request->path));
 `pipeline`。贺老师说要主动关闭连接，因此我的解析方式要改，在主函数中，通过`strtok`函数来根据`\r\n\r\n`来分割字符串。然后逐行解析吧。
 
 写到了`main`的`server`逻辑，明早起来把具体逻辑完善一下。
+
+# 2023-05-05
+
+我还是卡死在`pipeline`了。下午看看大佬们怎么实现的吧。
