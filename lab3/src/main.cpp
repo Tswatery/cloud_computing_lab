@@ -15,11 +15,11 @@ const option long_options[] = {
     {0, 0, 0, 0} // 结束标志
 };
 
-int main()
+int main(int argc, char* argv[])
 {
     string path;
     int opt;
-    while ((opt = getopt_long(argc, agrv, "c:", long_options, nullptr)) != -1)
+    while ((opt = getopt_long(argc, argv, "c:", long_options, nullptr)) != -1)
     {
         if (opt == 'c')
             path = optarg; // optarg是一个全局变量用于存储当前解析到的参数值
@@ -32,6 +32,6 @@ int main()
     {
         for (auto j : i)
             cout << j << ' ';
-        puts("")
+        puts("");
     }
 }

@@ -1,7 +1,17 @@
-CXX: g++
-CXXFLAGS: std=c++17 -Wall -Wextra
-SRCS
+CXX= g++
+CXXFLAGS= -std=c++17 -Wall -Wextra
+SRCS= main.cpp MessageProcessor.cpp
+OBJS=  $(SRCS:.cpp=.o)
+TARGET= kvstore2pcsystem
 
-all: kvstore2pcsystem
+all: $(TARGET)
 
-kvstore2pcsystem: main.o 
+$(TARGET): $(OBJS)
+	$(CXX) $(CXXFLAGS) $(OBJS) -o $(TARGET)
+
+.cpp.o:
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+	# $<表示依赖 $@表示目标文件
+
+clean:
+	rm -f $(OBJS) $(TARGET)

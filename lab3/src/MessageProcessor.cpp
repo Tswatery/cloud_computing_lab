@@ -22,7 +22,7 @@ vector<vector<string>> MessageProcessor::parseConfigFile(const string &path){
         */
         if(spilt_data[0] == "coordinator_info" || spilt_data[0] == "participant_info"){
             auto pos = spilt_data[1].find(":");
-            spilt_data.push_back(spilt_data[1].push_back(spilt_data.substr(pos + 1)));
+            spilt_data.push_back(spilt_data[1].substr(pos + 1));
             spilt_data[1] = spilt_data[1].substr(0, pos);
         }
         res.push_back(spilt_data);
@@ -30,7 +30,7 @@ vector<vector<string>> MessageProcessor::parseConfigFile(const string &path){
     return res;
 }
 
-void cutStringBySpace(string& str, vector<string>& split_data){
+void MessageProcessor::cutStringBySpace(const string& str, vector<string>& split_data){
     split_data.clear();
     stringstream sscin(str);
     string word;
