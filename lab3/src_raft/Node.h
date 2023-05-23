@@ -44,9 +44,16 @@ public:
         LogEntries.clear();
         currentLeaderId = 0; // 默认第一个是Leader
         logalready = 0;
+        if(myNodeId == 0) 
+            currentState = NodeState::Leader;
+        else 
+            currentState = NodeState::Fllower;
+        NodeIp.resize(numNodes);
+        NodePort.resize(numNodes);
         for(auto t : info){
-            NodeIp.push_back(t[1]);
-            NodePort.push_back(std::stoi(t[2]));
+            int idx = std::stoi(t[2]) % 8001;
+            NodeIp[idx] = t[1];
+            NodePort[idx] = std::stoi(t[2]);
         }
     }
 
@@ -66,7 +73,7 @@ private:
     void handleRequestVoteRequest(int candidateId, int term, int lastLogIndex, int lastLogTerm);
     bool isCandidateLogUpToDate(int lastLogIndex, int lastLogTerm);
     void sendRequestVoteResponse(int candidateId, int currentTerm, bool VoteGranted);
-    void handleRequestVoteResponse(int voterId, int term, bool voteGranted);
+    void handleRequestVoteResponse(int term, bool voteGranted);
 
     void becomeLeader();
     void sendHeartBeats();
@@ -86,14 +93,14 @@ private:
 
     //日志复制过程
     LogEntry CreateLogData(std::vector<std::string> &message);
-    void sendAppendEntries(int nodeid, LogEntry &Logdata, std::atomic_int& numReplySuccess);
+    void sendAppendEntries(int nodeid, LogEntry &Logdata, int& numReplySuccess);
     void HandleLog(LogEntry &Mylog);
     void sendLogResponse(int nodeid, std::string& type, std::string& data, bool success);
     void HandleLogResponse(int nodeid, std::string type, std::string& data, bool flag);
     void receiveAppendEntrySuccess(int nodeid);
     //提交
     void CommitLog(LogEntry Logdata, int fd = -1); // 提交信息
-    void sendCommitToFollowers(LogEntry Logdata); // 给所有的节点发送commit的信息
+    void sendCommitToFollowers(); // 给所有的节点发送commit的信息
     void SendCommitMsg(int nodeid); // 给nodeid的节点发送commit的信息
 
 // 变量

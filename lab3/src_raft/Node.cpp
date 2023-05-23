@@ -13,8 +13,8 @@ void Node::start(){
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = inet_addr(ip.c_str());
     addr.sin_port = htons(port);
-    if (connect(sockfd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == -1) {
-        cout << "Failed to connect to server" << endl;
+    if (bind(sockfd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == -1) {
+        printf("%s:%d fail to bind socket\n", ip.c_str(), port);
         close(sockfd);
         return;
     }
@@ -24,7 +24,7 @@ void Node::start(){
         close(sockfd);
         return;
     }
-    printf("Node start on %s:%d\n", ip.c_str(), port);
+    printf("%d Node start on %s:%d we have %d nodes in total and my nodeid is %d\n", myNodeId,ip.c_str(), port, numNodes, myNodeId);
     while(1){
         struct sockaddr_in clientAddr{};
         socklen_t clientAddrLen = sizeof(clientAddr);
@@ -36,6 +36,7 @@ void Node::start(){
             std::cerr << "Failed to accept client connection" << std::endl;
             continue;
         }
+        printf("%d在Node::start中clientSockfd是%d\n",myNodeId, clientSockfd); //执行
         HandleSockfd(clientSockfd);//怎么处理信息 
         close(clientSockfd);
     }
@@ -85,7 +86,7 @@ int Node::generateElectionTimeout(){
 void Node::becomeFollower(){
     currentState = NodeState::Fllower;
     votedFor = -1;
-    startElectionTimer();
+    //startElectionTimer();
 }
 
 void Node::becomeCandidate(){
@@ -97,7 +98,7 @@ void Node::becomeCandidate(){
         if(NodeId == myNodeId) continue;
         sendRequestVote(NodeId);
     }
-    startElectionTimer();
+    //startElectionTimer();
 }
 
 void Node::sendRequestVote(int Nodeid){
@@ -149,7 +150,7 @@ void Node::handleRequestVoteRequest(int candidateId, int term, int lastLogIndex,
     if((votedFor == -1 || votedFor == candidateId) && isCandidateLogUpToDate(lastLogIndex, lastLogTerm)){
         VoteGranted = true;
         votedFor = candidateId;
-        resetElectionTimer();
+        //resetElectionTimer();
     }
     sendRequestVoteResponse(candidateId, currentTerm, VoteGranted); // 回复投票结果
 }
@@ -192,7 +193,7 @@ void Node::sendRequestVoteResponse(int candidateId, int currentTerm, bool VoteGr
     close(sockfd);
 }
 
-void Node::handleRequestVoteResponse(int voterId, int term, bool voteGranted){
+void Node::handleRequestVoteResponse(int term, bool voteGranted){
     if(term > currentTerm){
         //收到了term比自己的大 更新任期
         currentTerm = term;
@@ -213,7 +214,7 @@ void Node::handleRequestVoteResponse(int voterId, int term, bool voteGranted){
 void Node::becomeLeader(){
     currentState = NodeState::Leader;
     currentLeaderId = myNodeId;
-    sendHeartBeats();
+    //sendHeartBeats();
 }
 
 void Node::sendHeartBeats(){
@@ -279,14 +280,21 @@ LogEntry Node::CreateLogData(vector<string>& split_message){
 }
 
 void Node::handleClientRequest(string& request, int fd){
+    printf("%d 进入了 Node::handleClientRequest ", myNodeId);
     // 只有Leader才能执行这个函数 来了一个请求后 需要将数据库操作加入日志 然后再广播日志 最后才能返回
     if(currentState != NodeState::Leader){
+        printf("%d不是领导者\n", myNodeId);
         sendRequestToLeader(request);
     }else {
+        printf("%d是leader\n", myNodeId);
         vector<string> split_message;
         if(!MessageProcessor::parseClinetMessage(request, split_message)){
             sendMessage(fd, MessageProcessor::getClinetERROR());
         }
+        printf("解析的结果是\n");
+        for(auto t : split_message)
+            cout << t << ' ';
+        puts("");
         auto Logdata = CreateLogData(split_message);
         LogEntries.push_back(Logdata); // 存在日志中
         if(split_message[0] == "GET"){
@@ -311,18 +319,15 @@ void Node::handleClientRequest(string& request, int fd){
             return ;
         }
         // 并发地向所有的跟随者发送追加信息
-        atomic_int numReplySuccess = 0; 
-        vector<thread> Mythread;
+        int numReplySuccess = 0; 
         for(int nodeid = 0; nodeid < numNodes; ++ nodeid){
             if(nodeid == myNodeId) continue;
-            thread t1(&Node::sendAppendEntries, this, nodeid, Logdata, &numReplySuccess);  // 应该是将Logadta给nodeid 因为在基础版本中不会有机器挂掉
-            Mythread.push_back(move(t1)); // 使用move进行传递
+            sendAppendEntries(nodeid, Logdata, numReplySuccess);  // 应该是将Logadta给nodeid 因为在基础版本中不会有机器挂掉
         }
-        for(auto &t : Mythread) t.join();
         //线程全部执行完毕
         if(numReplySuccess >= numNodes / 2 + 1){
             CommitLog(Logdata, fd); // 提交事务 并向fd发回消息
-            sendCommitToFollowers(Logdata); // 让所有的跟随者提交
+            sendCommitToFollowers(); // 让所有的跟随者提交
             //sendMessage(fd, HandleLogEntry(Logdata)); // 提交完毕 给所有的跟随者发送commit的消息 只有SET和DEL
         }
     }
@@ -341,7 +346,7 @@ void Node::CommitLog(LogEntry Logdata, int fd){
                 successcnt ++;
             } 
         }
-        if(~fd)
+        if(fd != -1)
             sendMessage(fd, ':' + to_string(successcnt) + "\r\n");
     }else if(Logdata.LogContent.type == "SET"){
         // SET CS06142 "Cloud Computing"
@@ -352,20 +357,17 @@ void Node::CommitLog(LogEntry Logdata, int fd){
             value += (s + ' ');
         }
         kvdb[key] = value; // 提交成功
-        if(~fd)
+        if(fd != -1)
             sendMessage(fd, "+OK\r\n");
     }
 }
 
-void Node::sendCommitToFollowers(LogEntry Logdata){ // 让所有的follower提交
+void Node::sendCommitToFollowers(){ // 让所有的follower提交
     // 使用线程来并行化
-    vector<thread> Mythread;
     for(int nodeid = 0; nodeid < numNodes; ++ nodeid){
         if(nodeid == myNodeId) continue;
-        thread t1(&Node::SendCommitMsg, this, nodeid);
-        Mythread.push_back(move(t1)); // std::thread是不可拷贝的
+        SendCommitMsg(nodeid);
     }
-    for(auto& t : Mythread) t.join(); // 等待全部完成
 }
 
 void Node::SendCommitMsg(int nodeid){
@@ -391,7 +393,7 @@ void Node::SendCommitMsg(int nodeid){
 }
 
 void Node::sendRequestToLeader(string& request){
-    while(currentLeaderId == -1) this_thread::sleep_for(chrono::microseconds(100));
+    //while(currentLeaderId == -1) this_thread::sleep_for(chrono::microseconds(100));
     auto ip = NodeIp[currentLeaderId];
     auto port = NodePort[currentLeaderId];
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -412,14 +414,15 @@ void Node::sendRequestToLeader(string& request){
     close(sockfd);
 }
 
-
 void Node::HandleSockfd(int fd){
+    printf("%d进入了Node::HandleSockf, fd 是%d\n",myNodeId, fd);
     string data;
     int flag = getMessage(fd, data);
     if(flag == 0 || flag == -1) {
         cout << "getmessage fail\n";
         return ;
     }
+    printf("%d在HandleSockfd中接受到了%s flag 是 %d\n",myNodeId, data.c_str(), flag);
     //data有几种类型，如果是客户端来的请求 里面一定含有$
     //如果是请求投票 那么就是以REQUEST_VOTE开头的
     //如果是回应投票 那么就是以VOTE_RESPONSE开头
@@ -442,7 +445,7 @@ void Node::HandleSockfd(int fd){
         ss >> nodeid;
         ss >> term;
         ss >> votegrant;
-        handleRequestVoteResponse(nodeid, term, (votegrant == "true" ? true : false));
+        handleRequestVoteResponse(term, (votegrant == "true" ? true : false));
     }else if(data.find("HEART_BEAT_MESSAGE") != string::npos){
         string type; int leaderid, term;
         ss >> type; 
@@ -464,31 +467,36 @@ void Node::HandleSockfd(int fd){
 }
 
 int Node::getMessage(int fd, string& data){
-    vector<char> buffer(MAX_BUF_SIZE);
+    printf("进入了getMessage中\n");
+    char buffer[MAX_BUF_SIZE];
     ssize_t byterecv = 0;
     do{
         byterecv = recv(fd, &buffer, MAX_BUF_SIZE, 0);
+        printf("byterecv 是 %d\n", (int)byterecv);
+        printf("在getMessage中接受到的数据是%s\n", buffer);
         if(byterecv < 0){
             perror("读取数据出现了问题");
             return -1;
         }else if(byterecv == 0){ //关闭了连接
+            cout << "关闭了连接\n";
             return 0;
         }else {
-            data.append(buffer.cbegin(), buffer.cbegin() + byterecv); // 常量迭代器
+            cout << "执行了 byterecv是" << byterecv << endl;
+            for(int i = 0; i < byterecv; ++ i)
+                data.push_back(buffer[i]);
         }
+        printf("在Node::getMessage中data是%s 它的长度是%ld\n", data.c_str(), data.size());
     }while(byterecv == MAX_BUF_SIZE);
-
     return 1;
 }
 
 int Node::sendMessage(int fd, const string& data){
-    int bytesend = 0;
     if(data.empty()) return 0;
     if(send(fd, data.c_str(), data.empty(), 0) < 0) return -1;
     return 1;
 }
 
-void Node::sendAppendEntries(int nodeid, LogEntry &Logdata, atomic_int& numReplySuccess){
+void Node::sendAppendEntries(int nodeid, LogEntry &Logdata, int& numReplySuccess){
     auto ip = NodeIp[nodeid];
     auto port = NodePort[nodeid];
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);

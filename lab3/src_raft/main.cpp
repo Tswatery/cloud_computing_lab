@@ -38,9 +38,5 @@ int main(int argc, char* argv[]){
     string ip = config_info[0][1];
     int port = stoi(config_info[0][2]);
     Node node(ip, port, config_info.size(), port % 8001, config_info);
-    // for(auto t : config_info){
-    //     node.NodeIp.push_back(t[1]);
-    //     node.NodePort.push_back(stoi(t[2]));
-    // }
     node.start();
 }
