@@ -24,16 +24,12 @@ bool MessageProcessor::parseClinetMessage(string &data, vector<string> &res){
         cout << "parseClinetMessage fail\n";
         return false;
     }
-    /**可以发现在SET操作的时候，value是分开的，因此选择合并它们
-     * *4\r\n$3\r\nSET\r\n$7\r\nCS06142\r\n$5\r\nCloud\r\n$9\r\nComputing\r\n
-     * 解析结果是 SET CS06142 Cloud Computing
-    */
-    if(res[0] == "SET" && linenum > 3){
-        for(int i = 3; i < linenum; ++ i)
-            data[2] += (' ' + data[i]);
-        for(int i = 3; i < linenum; ++ i)
-            data.pop_back(); // 删除合并的
-    }
+    // if(res[0] == "SET" && linenum > 3){
+    //     for(int i = 3; i < linenum; ++ i)
+    //         data[2] += (' ' + data[i]);
+    //     for(int i = 3; i < linenum; ++ i)
+    //         data.pop_back(); // 删除合并的
+    // }
     return true;
 }
 
@@ -70,4 +66,39 @@ vector<vector<string>> MessageProcessor::parseConfigFile(const string &path){
         res.push_back(split_data);
     }
     return res;
+}
+
+int MessageProcessor::getMessage(int fd, string& data){
+    // printf("进入了getMessage中\n");
+    char buffer[MAX_BUF_SIZE];
+    ssize_t byterecv = 0;
+    do{
+        byterecv = recv(fd, &buffer, MAX_BUF_SIZE, 0);
+        // printf("byterecv 是 %d\n", (int)byterecv);
+        // printf("在getMessage中接受到的数据是%s\n", buffer);
+        if(byterecv < 0){
+            perror("读取数据出现了问题");
+            return -1;
+        }else if(byterecv == 0){ //关闭了连接
+            cout << "关闭了连接\n";
+            return 0;
+        }else {
+            // cout << "执行了 byterecv是" << byterecv << endl;
+            for(int i = 0; i < byterecv; ++ i)
+                data.push_back(buffer[i]);
+        }
+        // printf("在Node::getMessage中data是%s 它的长度是%ld\n", data.c_str(), data.size());
+    }while(byterecv == MAX_BUF_SIZE);
+    return 1;
+}
+
+sockaddr_in MessageProcessor::getSockAddr(const string &ip, int port) {
+    sockaddr_in sockAddr{};
+    memset(&sockAddr, 0, sizeof(sockAddr));
+    sockAddr.sin_family=AF_INET;//设定ipv4协议
+    inet_pton(AF_INET,ip.c_str(),&sockAddr.sin_addr);//设定ip地址
+    if(port>0)//如果存在端口，则设置端口
+        sockAddr.sin_port= htons(port);
+
+    return sockAddr;
 }
