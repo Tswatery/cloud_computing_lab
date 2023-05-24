@@ -143,12 +143,17 @@ void Node::startElection(){
     //参与者开始计时
     FollowerTimerThread = thread([this](){
         unique_lock<mutex> lock(electionMutex);
-        cv_election.wait_for(lock, chrono::milliseconds(rand() % 201 + 800), [this](){return electionTimeout;});
+        while(1){
+            auto res = (cv_status)cv_election.wait_for(lock, chrono::milliseconds(rand() % 201 + 800), [this](){return electionTimeout;});
+            if(res == cv_status::timeout){ // 超时了
+                electionTimeout = false;
+                break;
+            } 
+            electionTimeout = false;
+        }
 //cv.wait_for的意思是等待多少ms或者直到electionTimeout为真重新计时
-        if(!electionTimeout)
+        if(!electionTimeout) //跳出循环 超时了执行后面的函数
             handleElectionTimeout();
-        else
-            printf("\033[32m 重新计时噜\n \033[0m\n");
     });
 }
 
@@ -269,11 +274,12 @@ void Node::startHeartBeat(){
 
 void Node::becomeLeader(){
     currentState = NodeState::Leader;
+    currentLeader = myNodeId;
     startHeartBeat();
 }
 
 void Node::becomeFollower(){
-    currentState = NodeState::Fllower;
+    currentState = NodeState::Follower;
     startElection();
 }
 

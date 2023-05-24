@@ -11,7 +11,7 @@
 
 enum class NodeState
 {
-    Fllower,
+    Follower,
     Candidate,
     Leader
 };
@@ -31,7 +31,7 @@ public:
         }
         else
         {
-            currentState = NodeState::Fllower;
+            currentState = NodeState::Follower;
             becomeFollower();//follower
         }
         Nodeip.resize(numNodes);
