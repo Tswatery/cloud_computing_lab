@@ -3,6 +3,10 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <thread>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include "MessageProcessor.h"
 
 enum class NodeState
@@ -18,11 +22,18 @@ public:
     Node(std::string ip, int port, int numNodes, int nodeid, std::vector<std::vector<std::string>> info)
         : ip(ip), port(port), numNodes(numNodes), myNodeId(nodeid)
     {
+        srand(time(nullptr));
         currentLeader = 0;
         if (myNodeId == 0)
+        {
             currentState = NodeState::Leader;
+            becomeLeader();
+        }
         else
+        {
             currentState = NodeState::Fllower;
+            becomeFollower();//follower
+        }
         Nodeip.resize(numNodes);
         Nodeport.resize(numNodes);
         for (auto t : info)
@@ -32,6 +43,7 @@ public:
             Nodeip[nodeport % 8001] = nodeip;
             Nodeport[nodeport % 8001] = nodeport;
         }
+        electionTimeout = false;
     }
     void start(); // 启动这个节点
 private:
@@ -49,6 +61,23 @@ private:
     void handleCommitRequest(std::string &data);
     // ⬆️这个是处理节点commit的信息 对应的是data
 
+    // ⬇️ Leader：
+    void becomeLeader();
+    void SendHeartBeat(); //
+    // ⬆️ 向nodeid的节点发送心跳信息
+    void startHeartBeat();
+    // ⬆️ 开启发送心跳信息的线程
+
+    // ⬇️ Follower：
+    void handleHeartBeat();       // 处理来自Follower的心跳信息
+    void startElection();         // 开始Follower的计时
+    void handleElectionTimeout(); // 超时后的处理
+    void restartElection(); //重新开始计时
+    void becomeFollower();
+
+    //Candidate:
+    void becomeCandidate();
+
     std::string ip;    // node的ip
     int port;          // node的port
     int numNodes;      // 总共有几个node
@@ -59,4 +88,11 @@ private:
     std::unordered_map<std::string, std::string> kvdb;
     std::vector<std::string> Nodeip;
     std::vector<int> Nodeport;
+
+    std::thread FollowerTimerThread; // 跟随者的计时线程
+    std::condition_variable cv_election;
+    std::mutex electionMutex;
+    bool electionTimeout;
+
+    std::thread heartbeatThread;
 };
