@@ -52,13 +52,19 @@ void Node::HandleSockfd(int sockfd){
     }
     //将data拿出来了 解析
     printf("\033[32m 响应了数据是%s\n\033[0m\n", data.c_str());
+    stringstream sscin(data);
     if(data.find('$') != string::npos) handleClientRequest(data, sockfd);
     else if(data.find("COMMIT") != string::npos){
         //节点的commit信息
         handleCommitRequest(data);
-    }else if(data.find("HEARTBEAT") != string::npos){
+    }else if(data.find("HeartBeat") != string::npos){
         //Follower接受到了心跳信息
         handleHeartBeat();
+    }else if(data.find("RequestVote") != string::npos){
+        string s; sscin >> s; sscin >> s;
+        handleRequestVote(stoi(s));
+    }else if(data.find("AgreeVote") != string::npos){
+        handleRecvVote();
     }
 }
 
@@ -135,39 +141,55 @@ void Node::handleCommitRequest(string& data){
 
 // ⬇️ 处理来自Leader的心跳信息 Follower需要重新计时
 void Node::handleHeartBeat(){
+    printf("\033[32m 节点%d接受到了心跳信息\033[0m\n", myNodeId);
     restartElection();
 }
 
 // ⬇️ 参与者开始计时
-void Node::startElection(){
+void Node::startElection(){ // 使用线程进行计时 如果超时了就启动另一个线程去handleTimeout
     //参与者开始计时
     FollowerTimerThread = thread([this](){
         unique_lock<mutex> lock(electionMutex);
-        while(1){
-            auto res = (cv_status)cv_election.wait_for(lock, chrono::milliseconds(rand() % 201 + 800), [this](){return electionTimeout;});
-            if(res == cv_status::timeout){ // 超时了
-                electionTimeout = false;
+        while(currentState == NodeState::Follower){
+            printf("\033[32m %d跟随者在倒计时 \033[0m \n", myNodeId);
+            if(currentState != NodeState::Follower) break;
+            auto res = (cv_status)cv_election.wait_for(lock, chrono::milliseconds(rand() % 600 + 800), [this](){return electionTimeout;});
+            if(res == cv_status::no_timeout){ // 超时了 妈的 这个地方卡好久 no_timeout才走下去
+                printf("\033[31m 超时了\n \033[0m");
+                {
+                    unique_lock<mutex> lock(TimeoutLock);
+                    is_timeout = true;
+                }
+                Timeout_cv.notify_one();
                 break;
             } 
             electionTimeout = false;
         }
-//cv.wait_for的意思是等待多少ms或者直到electionTimeout为真重新计时
-        if(!electionTimeout) //跳出循环 超时了执行后面的函数
-            handleElectionTimeout();
+    });
+}
+
+// ⬇️ 开启线程HandleTimeout监听是否超时
+void Node::handleElectionTimeout(){
+    HandleTimeout = thread([this](){
+        {
+            unique_lock<mutex> lock(TimeoutLock);
+            Timeout_cv.wait(lock, [this](){return is_timeout;});
+        }
+        if(is_timeout) 
+            printf("\033[31m 超时重选 \033[0m \n");
+        becomeCandidate();
     });
 }
 
 // ⬇️ 如果是handleHeartBeat的话 调用这个函数 然后就会给startElection发送信号让它重新计时
 void Node::restartElection(){
     //接受了Leader的信号开始重新计时
+    printf("\033[32m 节点%d开始重新计时\033[0m \n", myNodeId);
     {
         unique_lock<mutex> lock(electionMutex);
         electionTimeout = true;
     }
-    cv_election.notify_all();
 }
-
-
 
 // ⬇️ commit信息
 void Node::Commit(vector<string>& parse_msg, int fd){
@@ -254,7 +276,7 @@ void Node::SendHeartBeat(){
         if (connect(sockfd, reinterpret_cast<struct sockaddr*>(&serverAddress), sizeof(serverAddress)) == -1) {
             printf("\033[31m %d节点挂掉了\033[0m\n", nodeid);
             close(sockfd);
-            return;
+            continue; // 某个节点挂掉了之后可以向其他节点发送信息
         }
         string message = "HeartBeat!";
         send(sockfd, message.c_str(), message.size(), 0);
@@ -267,7 +289,7 @@ void Node::startHeartBeat(){
     heartbeatThread = thread([this]() {
         while (currentLeader == myNodeId) {
             SendHeartBeat();
-            this_thread::sleep_for(chrono::milliseconds(100)); // 每隔1秒发送一次心跳消息
+            this_thread::sleep_for(chrono::milliseconds(20)); 
         }
     });
 }
@@ -275,18 +297,69 @@ void Node::startHeartBeat(){
 void Node::becomeLeader(){
     currentState = NodeState::Leader;
     currentLeader = myNodeId;
-    startHeartBeat();
+    printf("Now the leaderid is %d\n", myNodeId);
+    startHeartBeat(); 
 }
 
 void Node::becomeFollower(){
+    printf("\033[032m Now the leader is %d\033[0m\n", currentLeader);
     currentState = NodeState::Follower;
     startElection();
 }
 
 
 /*⬇️ 未完成*/
-void Node::handleElectionTimeout(){
-    printf("\033[31m 超时重选\033[0m \n");
+
+/*⬇️ 成为候选者后的投票*/
+void Node::becomeCandidate(){
+    // 成为候选者后需要请求投票
+    currentState = NodeState::Candidate;
+    candidateVotenum = 1;
+    sendRequestVote();// 发送投票
+}
+
+/*⬇️ 发送投票请求*/
+void Node::sendRequestVote(){
+    for(int nodeid = 0; nodeid < numNodes; ++ nodeid){
+        if(nodeid == myNodeId) continue; //不能向自己发送消息
+        auto ip = Nodeip[nodeid];
+        auto port = Nodeport[nodeid];
+        int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+        auto serverAddress = MessageProcessor::getSockAddr(ip, port);
+        if (connect(sockfd, reinterpret_cast<struct sockaddr*>(&serverAddress), sizeof(serverAddress)) == -1) {
+            printf("\033[31m 发送投票的过程中发现%d节点挂掉了\033[0m\n", nodeid);
+            close(sockfd);
+            continue;
+        }
+        string message = "RequestVote! " + to_string(myNodeId);
+        send(sockfd, message.c_str(), message.size(), 0);
+        close(sockfd);
+    }
+}
+
+/*⬇️ follower响应投票请求*/
+// 接收到投票后也要重置自己的倒计时
+void Node::handleRequestVote(int nodeid ){
+    restartElection(); // 如果有一个节点接受到了请求投票的信息 那么它将继续是Follower
+    auto ip = Nodeip[nodeid];
+    auto port = Nodeport[nodeid];
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    auto serverAddress = MessageProcessor::getSockAddr(ip, port);
+    if (connect(sockfd, reinterpret_cast<struct sockaddr*>(&serverAddress), sizeof(serverAddress)) == -1) {
+        printf("\033[31m 响应投票的过程中发现%d节点挂掉了\033[0m\n", nodeid);
+        close(sockfd);
+        return;
+    }
+    string message = "AgreeVote!";
+    send(sockfd, message.c_str(), message.size(), 0);
+    close(sockfd);
+}
+
+/*⬇️ candidate接收到投票*/
+void Node::handleRecvVote(){
+    candidateVotenum ++;
+    if(candidateVotenum >= numNodes / 2) {
+        becomeLeader();
+    }
     // becomeCandidate();
-    return ;
 }

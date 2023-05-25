@@ -24,6 +24,8 @@ public:
     {
         srand(time(nullptr));
         currentLeader = 0;
+        Nodeip.resize(numNodes);
+        Nodeport.resize(numNodes);
         if (myNodeId == 0)
         {
             currentState = NodeState::Leader;
@@ -34,8 +36,6 @@ public:
             currentState = NodeState::Follower;
             becomeFollower();//follower
         }
-        Nodeip.resize(numNodes);
-        Nodeport.resize(numNodes);
         for (auto t : info)
         {
             int nodeport = std::stoi(t[2]);
@@ -44,6 +44,8 @@ public:
             Nodeport[nodeport % 8001] = nodeport;
         }
         electionTimeout = false;
+        is_timeout = false;
+        handleElectionTimeout(); // 开启线程
     }
     void start(); // 启动这个节点
 private:
@@ -74,9 +76,12 @@ private:
     void handleElectionTimeout(); // 超时后的处理
     void restartElection(); //重新开始计时
     void becomeFollower();
+    void handleRequestVote(int nodeid); // 处理来自nodeid的请求投票的信息
 
     //Candidate:
     void becomeCandidate();
+    void sendRequestVote(); // 向存活节点发送投票信息
+    void handleRecvVote(); //处理接受到了投票请求
 
     std::string ip;    // node的ip
     int port;          // node的port
@@ -95,4 +100,10 @@ private:
     bool electionTimeout;
 
     std::thread heartbeatThread;
+    std::thread HandleTimeout;
+    std::mutex TimeoutLock;
+    std::condition_variable Timeout_cv;
+    bool is_timeout;
+
+    int candidateVotenum;
 };
