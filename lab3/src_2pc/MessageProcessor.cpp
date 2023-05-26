@@ -2,145 +2,169 @@
 
 using namespace std;
 
-/**
- * MessageProcessor::parseConfigFile
- * input：配置文件的路径
- * 解析配置文件
- * mode、coordinator的IP以及端口、participant的IP以及端口
- * output：一个二重vector，内部含有这些信息 res
- * res[0]是mode
- * res[1]是协调者的信息
- * res[2]是参与者的信息
-*/
-
-vector<vector<string>> MessageProcessor::parseConfigFile(const string &path){
-    vector<vector<string>> res; // 结果
-
-    ifstream fin(path);
-    if(!fin){
-        perror("打不开文件");
-        exit(1);
-    }
-    string str;
-    while(getline(fin, str)){
-        if(str.empty() || str[0] == '!') continue;
-        // !是注释或者空行则跳过
-        vector<string> split_data;
-        split_data.clear();
-        stringstream sscin(str);
-        string word;
-        while(sscin >> word)
-            split_data.push_back(word);
-        // 使用stringstream来解析文件
-        if(split_data[0] == "coordinator_info" || split_data[0] == "participant_info"){
-            auto pos = split_data[1].find(":");
-            split_data.push_back(split_data[1].substr(pos + 1));
-            split_data[1] = split_data[1].substr(0, pos);
-        }
-        res.push_back(split_data);
-    }
-    return res;
-}
-
-/**
- * MessageProcessor::parseClinetMessage
- * input：需要解析的字符串data 解析结果存放的vector 
- * output：data是否正确
-*/
-
-bool MessageProcessor::parseClinetMessage(std::string &data, std::vector<std::string> &res){
-    if(data.empty()) return false;
-    /** 起先客户端会有一个* 加 数字比如 *1\r\n 1表示后续字符串的数量
-     * 客户端发来的数据是这样的：$7\r\nCS06142\r\n
-     * 可以使用stringstream来解决\r\n的读取问题 可以直接忽略
-     * 读到的结果就是$7和CS06142
-     * 其实可以不用管*和$的行，直接忽略即可
-    */
-    res.clear();
-    stringstream sscin(data); 
-    string tmp;
-    while(sscin >> tmp){
-        if(tmp[0] != '*' && tmp[0] != '$'){
-            res.push_back(tmp);
+bool MessageProcessor::parseClientMsg(const string &str, vector<string> &split_message) {
+    if(str.empty())
+        return false;
+    split_message.clear();//确保保存结果的vector为空
+    stringstream messageSS(str);
+    string temp;
+    while(getline(messageSS,temp))
+    {
+        if(temp[0]!='*' && temp[0]!='$')
+        {//这里只提取含有效字符串的行,丢弃表明字数的行
+            temp.pop_back();//将尾部的\r删掉
+            split_message.push_back(temp);
         }
     }
+    unsigned int lineNum=split_message.size();
+    if(lineNum<2 || (split_message[0]!="SET" && split_message[0]!="GET" && split_message[0]!="DEL"))
+        return false;
 
-    int linenum = res.size(); // 有多少个请求
-    if(linenum < 2 || (res[0] != "SET" && res[0] != "GET" && res[0] != "DEL")){
-        perror("解析函数parseClinetMessage出现了错误");
-        exit(1);
-    }
-    /**可以发现在SET操作的时候，value是分开的，因此选择合并它们
-     * *4\r\n$3\r\nSET\r\n$7\r\nCS06142\r\n$5\r\nCloud\r\n$9\r\nComputing\r\n
-     * 解析结果是 SET CS06142 Cloud Computing
-    */
-    if(res[0] == "SET" && linenum > 3){
-        for(int i = 3; i < linenum; ++ i)
-            data[2] += ' ' + data[i];
-        for(int i = 3; i < linenum; ++ i)
-            data.pop_back(); // 删除合并的
+    if(split_message[0]=="SET" && lineNum>3)
+    {//对SET操作进行处理，将value部分合并为一个字符串
+        for(int i=3;i<lineNum;i++)
+        {
+            split_message[2]+=' ';
+            split_message[2]+=split_message[i];
+        }
+        //合并完后将剩下的多余value分词字符串删除
+        for(int i=3;i<lineNum;i++)
+            split_message.pop_back();
     }
     return true;
 }
 
-string MessageProcessor::getClinetERROR(){
-    return "-ERROR\r\n";
+bool MessageProcessor::parseClusterMsg(const string &str, vector<string> &split_message) {
+    if(str.empty())
+        return false;
+    split_message.clear();//确保保存结果的vector为空
+    stringstream messageSS(str);
+    string temp;
+    while(getline(messageSS,temp))
+    {
+            temp.pop_back();//将尾部的\r删掉
+            split_message.push_back(temp);
+    }
+    unsigned int lineNum=split_message.size();
+    if(lineNum<2)
+        return false;
+    return true;
 }
 
-string MessageProcessor::getClientOK(){
+vector<vector<string>> MessageProcessor::parseConfigFile(const string &path) {
+    vector<vector<string>> split_file_data;
+
+    ifstream fin(path);
+    if(!fin)
+        return split_file_data;
+    string str;
+
+    while(getline(fin,str))
+    {
+        if(str.empty() || str[0]=='!')//为空行或注释行则跳过
+            continue;
+        vector<string> split_str;
+        cutStringBySpace(str,split_str);
+        if(split_str[0]=="coordinator_info" || split_str[0]=="participant_info")
+        {
+            auto pos=split_str[1].find(':');
+            if(pos!=string::npos)
+            {//切分地址和端口字段
+                split_str.push_back(split_str[1].substr(pos+1));
+                split_str[1]=split_str[1].substr(0,pos);
+            }
+        }
+        split_file_data.push_back(split_str);
+    }
+
+    return split_file_data;
+}
+
+string MessageProcessor::getClusterPrepareRequestMsg(int id, const vector<string> &split_message) {
+    string msg="PREPARED-REQUEST\r\n" + to_string(id) + "\r\n";//加上头部
+    for(const string &str:split_message)
+    {
+        msg+=str;
+        msg+="\r\n";
+    }
+    return msg;
+}
+
+string MessageProcessor::getClusterCommitMsg(int id) {
+    string msg="COMMIT\r\n" + to_string(id) + "\r\n";
+    return msg;
+}
+
+string MessageProcessor::getClusterAbortMsg(int id) {
+    string msg="ABORT\r\n" + to_string(id) + "\r\n";
+    return msg;
+}
+
+string MessageProcessor::getClusterPrepareMsg(int id, const string &method) {
+    return "PREPARED\r\n" + to_string(id) + "\r\n" + method + "\r\n";
+}
+
+string MessageProcessor::getClientOKMsg() {
     return "+OK\r\n";
 }
 
-/**
- * getClusterRequestToPrepare
- * 返回事务的准备信息和该事务的id号
-*/
+string MessageProcessor::getClientERRORMsg() {
+    return "-ERROR\r\n";
+}
 
-string MessageProcessor::getClusterRequestToPrepare(ing id, const vector<string> &split_message){
-    string res = "REQUESTPREPARE\r\n" + to_string(id) + "\r\n";
-    for(auto& t : split_message){
-        res += (t + "\r\n");
+string MessageProcessor::getClientGetOrDelMsg(int id, const vector<string> &split_message) {
+    auto lineNum=split_message.size();
+    //如果不是正好4行数据
+    if(lineNum!=4)
+        return getClientERRORMsg();
+
+    if(split_message[2]=="GET")
+    {//GET方法的返回数据
+        vector<string> split_value;
+        cutStringBySpace(split_message[3],split_value);
+        string retMsg="*"+to_string(split_value.size())+"\r\n";
+        for(const string& word:split_value)
+        {
+            retMsg+="$" + to_string(word.size()) + "\r\n";
+            retMsg+=word+"\r\n";
+        }
+        return retMsg;
     }
-    return res;
+    else if(split_message[2]=="DEL")
+        return ":" + split_message[3] + "\r\n";
+    else//不是GET也不是DEL，说明数据错误
+        return getClientERRORMsg();
 }
 
-string MessageProcessor::getClusterCommit(int id){
-    string res = "COMMIT\r\n" + to_string(id) + "\r\n";
-    return res;
+void MessageProcessor::cutStringBySpace(const string &str, vector<string> &split_str) {
+    split_str.clear();//将用于保存结果的数组清空
+    if(str.empty())
+        return ;
+
+    stringstream ss(str);
+    string word;
+
+    while(ss>>word)
+        split_str.push_back(word);
+
 }
 
-string MessageProcessor::getCluserAbort(int id){
-    string res = "ABORT\r\n" + to_string(id) + "\r\n";
-    return res;
+string MessageProcessor::getClusterDoneMsg(int id, const string &method, const string &additionStr) {
+    if(!additionStr.empty())
+        return "DONE\r\n" + to_string(id) + "\r\n" + method + "\r\n" + additionStr + "\r\n";
+    else
+        return "DONE\r\n" + to_string(id) + "\r\n" + method + "\r\n";
 }
 
-string MessageProcessor::getClusterPrepare(int id){
-    string res = "PREPARE\r\n" + to_string(id) + "\r\n";
-    return res;
+sockaddr_in MessageProcessor::getSockAddr(const string &ip, int port) {
+    sockaddr_in sockAddr{};
+    memset(&sockAddr, 0, sizeof(sockAddr));
+    sockAddr.sin_family=AF_INET;//设定ipv4协议
+    inet_pton(AF_INET,ip.c_str(),&sockAddr.sin_addr);//设定ip地址
+    if(port>0)//如果存在端口，则设置端口
+        sockAddr.sin_port= htons(port);
+
+    return sockAddr;
 }
 
-sockaddr_in MessageProcessor::getSocket(string& ip, int &port){
-    sockaddr_in ans;
-    ans.sin_family = AF_INET;//指定ipv4
-    ans.sin_addr.s_addr = inet_addr(ip.c_str());
-    if(port > 0)
-        ans.sin_port = htons(port);
-    return ans;
-}
 
-/**
- * 解析集群之间发送的信息 比如PREPARE\r\n1\r\n
- * 解析成功的话
-*/
-
-bool MessageProcessor::parseClusterMessage(string &data, vector<string> &message){
-    if(data.empty()) return false;
-    message.clear();
-    stringstream sscin(data);
-    string str;
-    while(sscin >> str){
-        message.push_back(str);
-    }
-    if(message.size() < 2) return false;
-    return true;
-}

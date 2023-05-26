@@ -1,6 +1,6 @@
 CXX= g++
 CXXFLAGS= -std=c++17 -Wall -Wextra
-SRCS= main.cpp MessageProcessor.cpp
+SRCS= main.cpp Participant.cpp Coordinator.cpp MessageProcessor.cpp
 OBJS=  $(SRCS:.cpp=.o)
 TARGET= kvstore2pcsystem
 all: $(TARGET)
