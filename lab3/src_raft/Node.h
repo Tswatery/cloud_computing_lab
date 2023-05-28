@@ -77,6 +77,7 @@ private:
     void restartElection(); //重新开始计时
     void becomeFollower();
     void handleRequestVote(int nodeid); // 处理来自nodeid的请求投票的信息
+    void sendLeaderInfo(int fd);
 
     //Candidate:
     void becomeCandidate();

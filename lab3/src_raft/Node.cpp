@@ -73,7 +73,8 @@ void Node::HandleSockfd(int sockfd){
 void Node::handleClientRequest(string& request, int fd){
     if(currentState != NodeState::Leader){// 如果不是leader的话 需要将请求传递给leader
         printf("%d is not leader\n", myNodeId);
-        sendRequestToLeader(request);
+        // sendRequestToLeader(request);
+        sendLeaderInfo(fd);
     }else {
         printf("%d is leader\n", myNodeId);
         vector<string> parse_msg; // 由于客户端来的request是很奇怪的 因此需要解析
@@ -109,6 +110,14 @@ void Node::handleClientRequest(string& request, int fd){
             Commit(parse_msg, fd);
         }
     }
+}
+
+void Node::sendLeaderInfo(int fd){
+    auto ip = Nodeip[currentLeader];
+    auto port = Nodeport[currentLeader];
+    string message = ip + ':' + to_string(port);
+    send(fd, message.c_str(), message.size(), 0);
+    close(fd);
 }
 
 // ⬇️ 处理commit信息
