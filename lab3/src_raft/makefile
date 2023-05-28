@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra
+CXXFLAGS = -std=c++17 -Wall -Wextra -pthread
 SRCS = main.cpp MessageProcessor.cpp Node.cpp
 OBJS = $(SRCS:.cpp=.o)
 TARGET = kvstoreraftsystem
